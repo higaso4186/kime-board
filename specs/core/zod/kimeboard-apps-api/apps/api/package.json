@@ -1,0 +1,22 @@
+{
+  "name": "@kimeboard/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p ${PORT:-3000}",
+    "lint": "echo \"(optional)\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^7.11.0",
+    "@google-cloud/tasks": "^6.2.0",
+    "@kimeboard/shared": "workspace:*",
+    "next": "^15.1.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

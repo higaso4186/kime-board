@@ -1,0 +1,18 @@
+{
+  "projectId": "prj_xxx",
+  "kind": "draft_actions_skill",
+  "status": "SUCCEEDED",
+  "decisionId": "dcs_xxx",
+  "draftActions": [
+    {
+      "type": "PREP",
+      "title": "A社の見積取得",
+      "description": "月次契約費用と最低保証の確認"
+    },
+    {
+      "type": "EXEC",
+      "title": "切替手順の社内周知",
+      "dueAt": "2026-02-18T00:00:00.000Z"
+    }
+  ]
+}

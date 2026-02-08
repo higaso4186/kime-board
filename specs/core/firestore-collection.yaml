@@ -1,0 +1,504 @@
+firestore_design:
+  database:
+    mode: "Native"
+    region: "asia-northeast1 (example)"
+    retention_policy:
+      backups: "MVPでは手動。将来はエクスポート運用"
+    notes:
+      - "FirestoreのDB作成は一度きり。terraform側で prevent_destroy 推奨"
+
+  conventions:
+    ids:
+      style: "ULID推奨（時系列ソートしやすい）"
+      fields:
+        createdAt: "serverTimestamp"
+        updatedAt: "serverTimestamp"
+    soft_delete:
+      enabled: true
+      fields:
+        isDeleted: false
+        deletedAt: null
+        deletedBy: null
+      rule: "原則削除しない。UIは isDeleted=false のみ表示"
+    multi_tenancy:
+      tenant_key: "orgId（将来）"
+      mvp: "単一組織想定。project_membershipで権限を管理"
+    external_refs:
+      field_name: "externalRefs"
+      structure:
+        - system: "NOTION|TLDV|SLACK|EMAIL|WEBHOOK|CUSTOM"
+          externalId: "string"
+          url: "string?"
+          lastSyncedAt: "timestamp?"
+      rule: "連携拡張で必ずここに追加。source単独では追跡しない"
+
+  collections:
+
+    # =========================
+    # ルート: projects
+    # =========================
+    - path: "projects/{projectId}"
+      doc:
+        description: "プロジェクト正本。ダッシュボード用の集計も持つ"
+        fields:
+          projectId: "string (== doc.id)"
+          name: "string"
+          description: "string?"
+          status: "ACTIVE|ARCHIVED"
+          tags: "string[]?"
+          createdAt: "timestamp"
+          createdBy: "userId"
+          updatedAt: "timestamp"
+          updatedBy: "userId"
+
+          # denormalized counters (dash/execに必須)
+          counters:
+            decisions_total: "number"
+            decisions_open: "number"                 # NEEDS_INFO + READY_TO_DECIDE (+ REOPEN含めるかは運用次第)
+            decisions_needs_info: "number"
+            decisions_ready: "number"
+            decisions_reopen: "number"
+            decisions_owner_missing: "number"
+            actions_overdue: "number"
+            meetings_total: "number"
+            meetings_analyzing: "number"
+
+          # UI上の最新情報
+          lastActivityAt: "timestamp?"
+          lastMeetingAt: "timestamp?"
+          lastDecisionUpdatedAt: "timestamp?"
+
+        invariants:
+          - "counters は API 側で更新（Cloud Functionsトリガーでも可だがMVPはAPIでOK）"
+          - "projectIdはULID推奨"
+      subcollections:
+
+        # =========================
+        # project_members: プロジェクト権限
+        # =========================
+        - path: "projects/{projectId}/members/{userId}"
+          doc:
+            description: "プロジェクトメンバーとロール。AuthZの基本単位"
+            fields:
+              userId: "string (== doc.id)"
+              role: "OWNER|ADMIN|MEMBER|VIEWER"
+              displayName: "string?"
+              email: "string?"
+              joinedAt: "timestamp"
+              invitedBy: "userId?"
+              lastSeenAt: "timestamp?"
+              isActive: "boolean"
+          indexes:
+            - "role, isActive"
+
+        # =========================
+        # meetings: 会議（束）
+        # =========================
+        - path: "projects/{projectId}/meetings/{meetingId}"
+          doc:
+            description: "入力（議事録/メモ）と解析状態を持つ。Decisionとは別軸。"
+            fields:
+              meetingId: "string (== doc.id)"
+              projectId: "string"
+              title: "string"
+              heldAt: "timestamp?"
+              participants: "string[]?"           # MVPは文字列、将来userId参照でもOK
+              source:
+                type: "PASTE|NOTION|TLDV|WEBHOOK|API"
+                connectorId: "string?"            # どのコネクタ経由か（将来）
+              raw:
+                # rawTextは長いので Firestore直に置くか、GCSに置いて参照するかを選べる
+                storage: "FIRESTORE|GCS"
+                text: "string? (if FIRESTORE)"
+                gcsUri: "string? (if GCS)"
+                checksum: "string? (sha256)"
+              status: "DRAFT|ANALYZING|DONE|FAILED"
+              agent:
+                lastRunId: "string?"
+                lastRunStatus: "RUNNING|SUCCEEDED|FAILED?"
+                lastRunAt: "timestamp?"
+                idempotencyKey: "string?"         # meetingId + raw.checksum などで生成
+              extracted:
+                decisionIds: "string[]?"          # 会議から見える束（Nが多いなら別コレに）
+                mergeCandidates: "object[]?"      # {candidateDecisionId, score} UI表示用（短く）
+              createdAt: "timestamp"
+              createdBy: "userId"
+              updatedAt: "timestamp"
+              updatedBy: "userId"
+
+              soft_delete:
+                isDeleted: "boolean"
+                deletedAt: "timestamp?"
+                deletedBy: "userId?"
+          indexes:
+            - "status, updatedAt desc"
+            - "heldAt desc"
+            - "source.type, createdAt desc"
+          subcollections:
+
+            # agent_runs: 解析実行ログ（会議単位）
+            - path: "projects/{projectId}/meetings/{meetingId}/agent_runs/{runId}"
+              doc:
+                description: "エージェントの可観測性。デモ強化にも使う"
+                fields:
+                  runId: "string (== doc.id)"
+                  meetingId: "string"
+                  projectId: "string"
+                  status: "RUNNING|SUCCEEDED|FAILED"
+                  startedAt: "timestamp"
+                  endedAt: "timestamp?"
+                  idempotencyKey: "string"        # meetingId + checksum
+                  logLines: "string[] (max 200 lines recommended)"
+                  metrics:
+                    model: "string? (gemini-*)"
+                    promptTokens: "number?"
+                    outputTokens: "number?"
+                    latencyMs: "number?"
+                  error:
+                    code: "string?"
+                    message: "string?"
+                    stack: "string?"
+              indexes:
+                - "startedAt desc"
+                - "status, startedAt desc"
+
+        # =========================
+        # decisions: 決裁（独立・積み上がる）
+        # =========================
+        - path: "projects/{projectId}/decisions/{decisionId}"
+          doc:
+            description: "Projectの意思決定バックログ。会議に依存しない。"
+            fields:
+              decisionId: "string (== doc.id)"
+              projectId: "string"
+              title: "string"
+              summary: "string?"
+              tags: "string[]?"                    # 予算/仕様/体制/GoNoGo…
+              status: "NEEDS_INFO|READY_TO_DECIDE|DECIDED|REOPEN|ARCHIVED"
+
+              owner:
+                userId: "string?"
+                displayName: "string?"
+                source: "MANUAL|AGENT_SUGGESTION?"
+              dueAt: "timestamp?"
+              priority: "LOW|MEDIUM|HIGH"
+              severity: "LOW|MEDIUM|HIGH?"         # 任意
+
+              # 構造化本体
+              options:
+                - id: "string"
+                  label: "string"
+                  description: "string?"
+                  recommended: "boolean?"
+              rationale:
+                pros: "string[]"
+                cons: "string[]"
+                conditions: "string[]"
+              assumptions: "string[]"
+              reopenTriggers: "string[]"
+              criteria: "string[]?"                # 判断基準（納期/コスト/品質…）
+              evidence:
+                mode: "NONE|QUOTE"
+                quotes:
+                  - source: "MEETING"
+                    meetingId: "string"
+                    text: "string (short excerpt)"
+                note: "引用は短く。個人情報含む場合はマスク"
+
+              completeness:
+                score: "number (0..100)"
+                missingFields: "string[]"
+                lastEvaluatedAt: "timestamp?"
+              linkage:
+                linkedMeetingIds: "string[]"
+                lastMentionedAt: "timestamp?"
+              merge:
+                parentDecisionId: "string?"
+                mergeCandidates:
+                  - candidateDecisionId: "string"
+                    score: "number"
+                    reason: "string?"
+                mergeStatus: "NONE|CANDIDATE|MERGED"
+                requiresHumanApproval: "boolean"
+
+              # 状態遷移・監査
+              decidedAt: "timestamp?"
+              decidedBy: "userId?"
+              decidedOptionId: "string?"
+              audit:
+                version: "number"
+                lastChangedFields: "string[]"
+                lastChangeSummary: "string?"
+              createdAt: "timestamp"
+              createdBy: "userId"
+              updatedAt: "timestamp"
+              updatedBy: "userId"
+
+              soft_delete:
+                isDeleted: "boolean"
+                deletedAt: "timestamp?"
+                deletedBy: "userId?"
+          indexes:
+            # バックログ・管理職ビュー用
+            - "status, updatedAt desc"
+            - "status, dueAt asc"
+            - "owner.userId, status, dueAt asc"
+            - "priority, status, dueAt asc"
+            - "completeness.score asc"
+            - "merge.mergeStatus, updatedAt desc"
+            - "linkage.lastMentionedAt desc"
+          subcollections:
+
+            # actions: Decisionに紐づくアクション
+            - path: "projects/{projectId}/decisions/{decisionId}/actions/{actionId}"
+              doc:
+                description: "Prep/Execアクション。期限超過や担当で一覧化する"
+                fields:
+                  actionId: "string (== doc.id)"
+                  projectId: "string"
+                  decisionId: "string"
+                  type: "PREP|EXEC"
+                  title: "string"
+                  description: "string?"
+                  assignee:
+                    userId: "string?"
+                    displayName: "string?"
+                  dueAt: "timestamp?"
+                  status: "TODO|DOING|DONE|BLOCKED"
+                  blockedReason: "string?"
+                  createdAt: "timestamp"
+                  createdBy: "userId"
+                  updatedAt: "timestamp"
+                  updatedBy: "userId"
+              indexes:
+                - "type, status, dueAt asc"
+                - "assignee.userId, status, dueAt asc"
+                - "status, updatedAt desc"
+
+            # threads: Decision単位の会話スレッド参照（実体は project下に置く案も可）
+            - path: "projects/{projectId}/decisions/{decisionId}/threads/{threadId}"
+              doc:
+                description: "Decisionスコープの会話スレッド（IN_APPがMVP）"
+                fields:
+                  threadId: "string (== doc.id)"
+                  projectId: "string"
+                  decisionId: "string"
+                  channel: "IN_APP|WEBHOOK|EMAIL|SLACK|TEAMS"
+                  title: "string?"
+                  createdAt: "timestamp"
+                  createdBy: "userId?"
+                  lastMessageAt: "timestamp?"
+                  unreadCountByUser:
+                    userId: "number"                # 実装しなければ省略
+                  externalRefs: "externalRefs[]?"
+              indexes:
+                - "channel, lastMessageAt desc"
+              subcollections:
+                - path: "projects/{projectId}/decisions/{decisionId}/threads/{threadId}/messages/{messageId}"
+                  doc:
+                    description: "チャットメッセージ（質問/回答セット含む）"
+                    fields:
+                      messageId: "string (== doc.id)"
+                      threadId: "string"
+                      senderType: "AGENT|USER|SYSTEM"
+                      format: "TEXT|QUESTION_SET|ANSWER_SET"
+                      content: "string"
+                      metadata:
+                        # QUESTION_SET
+                        questions:
+                          - qid: "string"
+                            type: "single_select|multi_select|date|text"
+                            text: "string"
+                            options: "string[]?"
+                            required: "boolean?"
+                        # ANSWER_SET
+                        answers:
+                          - qid: "string"
+                            value: "string|string[]|timestamp"
+                      createdAt: "timestamp"
+                      createdBy: "userId?"
+                      relatesTo:
+                        decisionId: "string"
+                        meetingId: "string?"
+                  indexes:
+                    - "createdAt asc"
+                    - "senderType, createdAt desc"
+
+            # audit_logs: 決裁の差分監査（任意だが審査で強い）
+            - path: "projects/{projectId}/decisions/{decisionId}/audit_logs/{logId}"
+              doc:
+                description: "フィールド差分/変更者/変更理由。信頼性アピール"
+                fields:
+                  logId: "string (== doc.id)"
+                  decisionId: "string"
+                  projectId: "string"
+                  version: "number"
+                  changedAt: "timestamp"
+                  changedBy: "userId"
+                  changeSummary: "string"
+                  diff:
+                    before: "object (partial)"
+                    after: "object (partial)"
+              indexes:
+                - "changedAt desc"
+
+        # =========================
+        # agendas: 会議アジェンダ（生成物）
+        # =========================
+        - path: "projects/{projectId}/agendas/{agendaId}"
+          doc:
+            description: "会議アジェンダ。決裁バックログから生成/編集"
+            fields:
+              agendaId: "string (== doc.id)"
+              projectId: "string"
+              title: "string"
+              horizon: "THIS_WEEK|NEXT_WEEK|CUSTOM"
+              targetMeetingId: "string?"            # 紐づけたい場合
+              items:
+                - type: "DECIDE|PREP|REOPEN"
+                  decisionId: "string?"
+                  title: "string"
+                  timeboxMin: "number"
+                  ownerUserId: "string?"
+                  notes: "string?"
+              createdAt: "timestamp"
+              createdBy: "userId"
+              updatedAt: "timestamp"
+              updatedBy: "userId"
+          indexes:
+            - "updatedAt desc"
+            - "createdAt desc"
+
+        # =========================
+        # notifications: アプリ内通知（Output拡張の受け皿）
+        # =========================
+        - path: "projects/{projectId}/notifications/{notificationId}"
+          doc:
+            description: "MVPはアプリ内ベル通知。拡張でWebhook/Emailにも利用"
+            fields:
+              notificationId: "string (== doc.id)"
+              projectId: "string"
+              eventType: "DECISION_NEEDS_INFO|DECISION_READY_TO_DECIDE|DECISION_DECIDED|AGENT_RUN_FAILED"
+              target:
+                userId: "string?"
+                role: "OWNER|ADMIN|MEMBER|VIEWER?"
+              title: "string"
+              body: "string"
+              link:
+                route: "string"                     # /p/.../decisions/...
+              readBy:
+                userId: "timestamp"                 # 既読時刻
+              createdAt: "timestamp"
+              createdBy: "SYSTEM|AGENT|USER"
+              delivery:
+                channel: "IN_APP"
+                status: "DELIVERED|FAILED?"
+          indexes:
+            - "createdAt desc"
+            - "eventType, createdAt desc"
+
+        # =========================
+        # indexes_meta: Firestore indexの管理用（任意）
+        # =========================
+        - path: "projects/{projectId}/_meta/indexes/{docId}"
+          doc:
+            description: "インデックス運用メモ（実体はFirestoreのComposite Index設定）"
+            fields:
+              name: "string"
+              purpose: "string"
+              fields: "string[]"
+              createdAt: "timestamp"
+
+  cross_project_aggregations:
+    description: "管理職ビューなどでProject横断が必要ならrootに集計コレクションを追加（MVPは不要）"
+    optional_collections:
+      - path: "orgs/{orgId}/decision_rollups/{docId}"
+        note: "将来"
+
+  querying_guidelines:
+    core_lists:
+      dashboard_snapshot:
+        query:
+          - "projects/{projectId}/decisions where status in [NEEDS_INFO, READY_TO_DECIDE, REOPEN] orderBy updatedAt desc limit 5"
+      backlog_kanban:
+        query:
+          - "projects/{projectId}/decisions where status == X orderBy dueAt asc (nulls last) limit 50"
+      exec_owner_missing:
+        query:
+          - "projects/{projectId}/decisions where status in [NEEDS_INFO, READY_TO_DECIDE] and owner.userId == null (実際はownerMissing booleanを持つと楽)"
+        recommendation:
+          - "Firestoreはnull条件が面倒なので ownerMissing: true をdenormalize推奨"
+      actions_overdue:
+        note: "subcollection横断はcollectionGroupが必要"
+        query:
+          - "collectionGroup(actions) where projectId == :projectId and status != DONE and dueAt < now orderBy dueAt asc"
+
+  denormalization_fields_recommended:
+    on_decision:
+      - "ownerMissing: boolean"
+      - "dueMissing: boolean"
+      - "criteriaMissing: boolean"
+      - "optionsCount: number"
+      - "linkedMeetingCount: number"
+    on_project:
+      - "counters.* (dash/execの高速化)"
+    on_thread:
+      - "lastMessageAt"
+      - "unreadCountByUser (後回し可)"
+
+  idempotency_and_concurrency:
+    patterns:
+      meeting_agent_run:
+        idempotency_key: "meetingId + raw.checksum"
+        lock_fields:
+          - "meetings/{meetingId}.agent.lastRunId"
+          - "meetings/{meetingId}.status == ANALYZING"
+        rules:
+          - "同一checksumなら既存runを再利用 or no-op"
+          - "異なるchecksumなら新run（version+1）"
+      answer_integrate:
+        idempotency_key: "messageId"
+        rules:
+          - "同一messageIdで2回integrateしても同じ結果に"
+      merge_candidate:
+        rule: "mergeCandidatesはAIが提示、merge確定は humanApproval=true のまま"
+
+  security_model_notes:
+    strategy:
+      - "MVPはAPI経由アクセスが基本。将来クライアント直読みする場合に備えてproject_membersで制御"
+      - "クライアント直アクセスするなら、projects/{projectId}配下のみ許可し、membersに存在するuserだけread"
+    sensitive_data:
+      - "meeting.raw.text は個人情報を含み得るため、将来はGCS格納+署名URLが安全"
+      - "audit_logs は権限強め（ADMIN以上）推奨"
+
+  composite_indexes_suggested:
+    # FirestoreのComposite Index定義は firestore.indexes.json 等で管理する想定（Terraformでも可）
+    - name: "decisions_by_status_due"
+      collection: "projects/{projectId}/decisions"
+      fields: ["status ASC", "dueAt ASC"]
+      purpose: "バックログの期限順"
+    - name: "decisions_by_owner_status_due"
+      collection: "projects/{projectId}/decisions"
+      fields: ["owner.userId ASC", "status ASC", "dueAt ASC"]
+      purpose: "担当者別の滞留/期限"
+    - name: "decisions_by_mergeStatus_updated"
+      collection: "projects/{projectId}/decisions"
+      fields: ["merge.mergeStatus ASC", "updatedAt DESC"]
+      purpose: "マージ候補の管理"
+    - name: "meetings_by_status_updated"
+      collection: "projects/{projectId}/meetings"
+      fields: ["status ASC", "updatedAt DESC"]
+      purpose: "解析中/失敗の追跡"
+    - name: "notifications_by_event_created"
+      collection: "projects/{projectId}/notifications"
+      fields: ["eventType ASC", "createdAt DESC"]
+      purpose: "通知フィルタ"
+
+  optional_files_for_repo:
+    recommended:
+      - path: "infra/firestore/firestore.indexes.json"
+        purpose: "Composite Index管理"
+      - path: "infra/firestore/firestore.rules"
+        purpose: "将来クライアント直アクセスをする場合のルール"
+      - path: "packages/shared/schema.ts"
+        purpose: "Decision/Meeting/ActionのZodスキーマ（APIとUIで共有）"

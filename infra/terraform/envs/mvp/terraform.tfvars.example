@@ -1,0 +1,19 @@
+project_id   = "your-gcp-project-id"
+region       = "asia-northeast1"
+environment  = "mvp"
+
+# Optional domain settings (Pattern A recommended)
+apex_domain  = "example.com"
+# api_domain = "api-mvp.example.com"
+# web_domain = "mvp.example.com"
+
+# Keep Cloud Run off until image pipeline is ready.
+enable_cloud_run = false
+
+# If you already publish API on a fixed domain, set this.
+# api_base_url = "https://api-mvp.example.com"
+
+# Optional image overrides once CI builds real images
+# web_image   = "asia-northeast1-docker.pkg.dev/your-gcp-project-id/kimeboard-mvp/web:latest"
+# api_image   = "asia-northeast1-docker.pkg.dev/your-gcp-project-id/kimeboard-mvp/api:latest"
+# agent_image = "asia-northeast1-docker.pkg.dev/your-gcp-project-id/kimeboard-mvp/agent:latest"

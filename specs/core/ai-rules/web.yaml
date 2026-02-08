@@ -1,0 +1,23 @@
+ai_rules_web:
+  id: "AI-RULES-WEB-001"
+  scope: "apps/web"
+  priorities:
+    - "shared DTOと100%整合したフォーム/表示"
+    - "操作導線：会議入力 → 決裁一覧 → 決裁詳細 → 質問回答 → アクション"
+    - "MVPは高速に見せる（ローディング/空状態/エラー表示）"
+  ui_invariants:
+    - "PCファースト（横幅 1200-1440 の情報密度が主戦場）"
+    - "主要3画面: Project / Decision / Meeting"
+    - "状態表示は必須: Meeting.status / Decision.status / completeness.score"
+    - "チャットUIは format を明示してレンダリング分岐（QUESTION_SET/ANSWER_SET/NOTE）"
+  data_contract:
+    - "API呼び出し前にZodでclient-side parse（可能なら）"
+    - "エラー表示はAPIの {code,message} をそのまま見せない。ユーザー向け文言に変換"
+  mvp_out_of_scope_but_keep_open:
+    - "モバイル最適化"
+    - "外部通知チャネル（Slack/Email）"
+    - "高度な検索/タグ分析ダッシュボード"
+  implementation_guidelines:
+    - "DTOは shared をimportして型とバリデーションに利用"
+    - "ページごとに `loading/empty/error` を最低限用意"
+    - "書き込みは optimistic にしない（MVPは堅実）"

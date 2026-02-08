@@ -1,0 +1,317 @@
+infra_mvp_environment:
+  env_name: "mvp"
+  gcp:
+    project_id: "${GCP_PROJECT_ID}"
+    region: "asia-northeast1"
+    billing_enabled: true
+
+  # =========================
+  # 0) 前提条件（Terraform適用前に必要）
+  # =========================
+  prerequisites:
+    - name: "Domain ownership"
+      required: true
+      description: "既に所有しているドメイン（例: example.com）"
+    - name: "DNS control"
+      required: true
+      description: "DNSレコードを編集できること（Cloud DNSでも外部DNSでも可）"
+    - name: "Terraform state backend"
+      required: true
+      recommended: "GCSにstateを配置"
+      resources:
+        - "GCS bucket: tfstate-${project_id}"
+      notes:
+        - "state用バケットは一度作ったら消さない"
+    - name: "APIs enabled"
+      required: true
+      enable_list:
+        - "run.googleapis.com"
+        - "artifactregistry.googleapis.com"
+        - "firestore.googleapis.com"
+        - "cloudtasks.googleapis.com"
+        - "secretmanager.googleapis.com"
+        - "iam.googleapis.com"
+        - "cloudresourcemanager.googleapis.com"
+        - "domains.googleapis.com (optional: Cloud Domains使う場合)"
+        - "dns.googleapis.com (Cloud DNS使う場合)"
+        - "certificatemanager.googleapis.com (LB方式の場合)"
+      note: "Terraformで有効化する想定（module.project）"
+
+  # =========================
+  # 1) 環境変数（infra側の入力値）
+  # =========================
+  inputs:
+    domain:
+      apex: "${APEX_DOMAIN}"            # 例: example.com
+      mvp_subdomain: "mvp"
+      full_domain: "mvp.${APEX_DOMAIN}" # 例: mvp.example.com
+    naming:
+      prefix: "kimeboard"
+      suffix: "mvp"
+      web_service_name: "kimeboard-web-mvp"
+      api_service_name: "kimeboard-api-mvp"
+      agent_service_name: "kimeboard-agent-mvp"
+      artifact_repo: "kimeboard-mvp"
+    firestore:
+      database_id: "(default)"
+      prevent_destroy: true
+    network:
+      use_vpc_connector: false          # MVPは無しでOK
+    security:
+      web_public: true
+      api_public: true                  # MVP簡易。後でweb->apiのみ等に締める
+      agent_public: false               # Cloud Tasksからのみ
+    runtime_defaults:
+      cloud_run:
+        min_instances: 0
+        max_instances: 2
+        cpu: "1"
+        memory: "512Mi"
+        concurrency: 40
+        timeout_seconds: 60
+
+  # =========================
+  # 2) リソース定義（最小でテスト可能）
+  # =========================
+  resources:
+
+    artifact_registry:
+      name: "${inputs.naming.artifact_repo}"
+      format: "DOCKER"
+      location: "${gcp.region}"
+      iam:
+        - role: "roles/artifactregistry.writer"
+          members:
+            - "serviceAccount:${sa.cicd.email}"
+
+    firestore:
+      type: "Firestore Native"
+      location: "${gcp.region}"
+      lifecycle:
+        prevent_destroy: "${inputs.firestore.prevent_destroy}"
+      notes:
+        - "MVPではRulesは厳密化しない（API経由前提）"
+        - "将来クライアント直アクセスするなら rules/indexes を管理"
+
+    secret_manager:
+      secrets:
+        - name: "MVP_CONFIG"
+          description: "公開repoに置けない設定をまとめる（将来拡張）"
+        - name: "API_INTERNAL_TOKEN"
+          description: "web/api間の簡易保護に使える（MVPでは未使用でも良い）"
+        - name: "VERTEX_MODEL"
+          description: "例: gemini-2.5-flash"
+      access_policy:
+        - secret: "MVP_CONFIG"
+          readers: ["serviceAccount:${sa.api.email}", "serviceAccount:${sa.agent.email}", "serviceAccount:${sa.web.email}"]
+        - secret: "VERTEX_MODEL"
+          readers: ["serviceAccount:${sa.agent.email}"]
+
+    iam_service_accounts:
+      accounts:
+        - id: "kimeboard-web-mvp"
+          display_name: "kimeboard web mvp"
+        - id: "kimeboard-api-mvp"
+          display_name: "kimeboard api mvp"
+        - id: "kimeboard-agent-mvp"
+          display_name: "kimeboard agent mvp"
+        - id: "kimeboard-cicd-mvp"
+          display_name: "kimeboard cicd mvp"
+      roles:
+        web:
+          - "roles/run.invoker (if calling api over http with auth later)"
+        api:
+          - "roles/datastore.user"          # Firestore access
+          - "roles/cloudtasks.enqueuer"     # enqueue agent tasks
+          - "roles/secretmanager.secretAccessor"
+        agent:
+          - "roles/secretmanager.secretAccessor"
+          - "roles/aiplatform.user"         # Vertex AI呼び出し
+        cicd:
+          - "roles/run.admin"
+          - "roles/iam.serviceAccountUser"
+          - "roles/artifactregistry.writer"
+
+    cloud_tasks:
+      queues:
+        - name: "agent-queue-mvp"
+          location: "${gcp.region}"
+          rate_limits:
+            max_dispatches_per_second: 2
+            max_concurrent_dispatches: 1
+          retry_config:
+            max_attempts: 5
+            min_backoff_seconds: 10
+            max_backoff_seconds: 120
+
+    cloud_run:
+      services:
+        - name: "${inputs.naming.web_service_name}"
+          image: "REGISTRY/${inputs.naming.artifact_repo}/web:latest"
+          service_account: "${sa.web.email}"
+          public_invoker: "${inputs.security.web_public}"
+          env:
+            - { key: "NEXT_PUBLIC_API_BASE_URL", value: "https://${inputs.domain.full_domain}/api" }
+            - { key: "APP_ENV", value: "mvp" }
+
+        - name: "${inputs.naming.api_service_name}"
+          image: "REGISTRY/${inputs.naming.artifact_repo}/api:latest"
+          service_account: "${sa.api.email}"
+          public_invoker: "${inputs.security.api_public}"
+          env:
+            - { key: "APP_ENV", value: "mvp" }
+            - { key: "FIRESTORE_PROJECT_ID", value: "${gcp.project_id}" }
+            - { key: "CLOUD_TASKS_QUEUE", value: "agent-queue-mvp" }
+            - { key: "AGENT_TASK_URL_MEETING", value: "https://${cloud_run.agent.url}/tasks/meeting_structurer" }
+            - { key: "AGENT_TASK_URL_REPLY", value: "https://${cloud_run.agent.url}/tasks/reply_integrator" }
+            - { key: "AGENT_TASK_URL_ACTIONS", value: "https://${cloud_run.agent.url}/tasks/draft_actions_skill" }
+          secrets:
+            - { key: "API_INTERNAL_TOKEN", secret: "API_INTERNAL_TOKEN" }
+
+        - name: "${inputs.naming.agent_service_name}"
+          image: "REGISTRY/${inputs.naming.artifact_repo}/agent:latest"
+          service_account: "${sa.agent.email}"
+          public_invoker: "${inputs.security.agent_public}" # false
+          env:
+            - { key: "APP_ENV", value: "mvp" }
+            - { key: "API_BASE_URL", value: "https://${inputs.domain.full_domain}" } # webドメイン配下でapiへ到達
+            - { key: "API_AUDIENCE", value: "https://${inputs.domain.full_domain}" }
+          secrets:
+            - { key: "VERTEX_MODEL", secret: "VERTEX_MODEL" }
+
+      iam_invoker_bindings:
+        - service: "${inputs.naming.web_service_name}"
+          members: ["allUsers"]
+          role: "roles/run.invoker"
+
+        - service: "${inputs.naming.api_service_name}"
+          members: ["allUsers"]
+          role: "roles/run.invoker"
+          note: "MVP簡易公開。後でwebのみ許可に変更可能"
+
+        - service: "${inputs.naming.agent_service_name}"
+          members:
+            - "serviceAccount:${sa.api.email}"     # APIがTasksを起動し、TasksがAgentを叩く想定でも良い
+            - "serviceAccount:${sa.cicd.email}"
+          role: "roles/run.invoker"
+          note: "実運用はCloud TasksのOIDCで叩く。MVPは到達経路を固定する"
+
+  # =========================
+  # 3) mvp.ドメイン公開（HTTPS）: Cloud Run Domain Mapping方式
+  # =========================
+  domain_publication:
+    approach: "cloud_run_domain_mapping"
+    why: "MVPで最短。HTTPSも自動で管理されやすい"
+    mapping:
+      domain: "${inputs.domain.full_domain}"           # mvp.example.com
+      target_cloud_run_service: "${inputs.naming.web_service_name}"
+      path_routing:
+        - path_prefix: "/api"
+          target: "${inputs.naming.api_service_name}"
+          note: "Cloud RunのDomain Mappingは基本1サービス。/apiを同一ドメインで使う場合は構成に注意（下の推奨を参照）"
+    critical_note:
+      - "Cloud Runの“単純なドメインマッピング”は通常 1ドメイン=1サービス です。"
+      - "同一ドメインで /api も使いたい場合、以下どちらかが現実的です："
+    recommended_patterns:
+      - pattern: "A (推奨・簡単)"
+        description: "web は mvp.example.com、api は api-mvp.example.com に分ける"
+        domains:
+          web: "mvp.${APEX_DOMAIN}"
+          api: "api-mvp.${APEX_DOMAIN}"
+        impact: "ルーティングが単純。NextのAPIを別サービスにしてもOK"
+      - pattern: "B (単一ドメインにこだわる)"
+        description: "HTTP(S) Load Balancer + Serverless NEG で /api を振り分け"
+        components_required:
+          - "Global HTTP(S) LB"
+          - "Serverless NEG (web/api)"
+          - "URL Map (path rules)"
+          - "Managed SSL cert"
+        impact: "構成が増えるが理想の /api 同居ができる"
+
+    dns_steps:
+      - step: "DNS Zone"
+        description: "Cloud DNS or external DNS どちらでも可"
+      - step: "Add record for web domain"
+        record_type: "CNAME (typical for Cloud Run mapping)"
+        name: "${inputs.domain.mvp_subdomain}"   # mvp
+        value: "ghs.googlehosted.com."
+        ttl: 300
+        note: "実際の値はCloud Run domain mapping作成後に案内されるDNS値に従う"
+      - step: "Optional: api subdomain (Pattern Aの場合)"
+        record_type: "CNAME"
+        name: "api-mvp"
+        value: "ghs.googlehosted.com."
+        ttl: 300
+
+    ssl:
+      managed: true
+      note: "証明書発行までDNS反映後に時間がかかる場合がある（MVPでは許容）"
+
+  # =========================
+  # 4) MVPで最低限“テストできる”環境設定
+  # =========================
+  mvp_test_minimum:
+    goals:
+      - "UI表示（/）"
+      - "会議メモ貼付→Meeting作成→Agent起動→Decision抽出（擬似でも可）"
+      - "Decision詳細で不足質問→回答→Decision更新"
+    environment_config:
+      runtime_mode: "MVP"
+      feature_flags:
+        - name: "ENABLE_CONNECTORS"
+          value: false
+          note: "MVPはPasteのみ"
+        - name: "ENABLE_EXTERNAL_OUTPUTS"
+          value: false
+          note: "通知はアプリ内のみ"
+      seed_data:
+        enabled: true
+        method: "API endpoint (admin-only) or CI job"
+        creates:
+          - "Project 1件"
+          - "Decision数件（NEEDS_INFO/READY/DECIDED混在）"
+          - "Thread+Message（質問セットのダミー）"
+    smoke_tests:
+      - name: "web_health"
+        request: "GET https://mvp.${APEX_DOMAIN}/healthz (or /)"
+        expected: "200"
+      - name: "api_health"
+        request: "GET https://api-mvp.${APEX_DOMAIN}/healthz (Pattern Aの場合)"
+        expected: "200"
+      - name: "create_meeting"
+        request: "POST /api/projects/{projectId}/meetings"
+        expected: "meetingId returned, status=ANALYZING"
+      - name: "agent_task_reachable"
+        request: "Cloud Tasks enqueue -> agent endpoint returns 200"
+        expected: "AgentRun SUCCEEDED or FAILED visible"
+
+  # =========================
+  # 5) 公開repo前提の“秘密情報取り扱い”
+  # =========================
+  public_repo_hardening:
+    do_not_commit:
+      - ".env"
+      - "service-account-key.json"
+      - "terraform.tfstate*"
+    secrets_storage:
+      - "Secret Manager（推奨）"
+      - "CI secrets（GitHub Actions secrets等）"
+    minimum_secrets:
+      - "API_INTERNAL_TOKEN (後でapiを閉じる時に使える)"
+      - "VERTEX_MODEL"
+    notes:
+      - "MVPでapiをpublicにするなら、最低限レート制限や簡易キーを検討（後でOK）"
+
+  # =========================
+  # 6) 例外・落とし穴チェックリスト（抜け漏れ防止）
+  # =========================
+  checklist:
+    - "Cloud Run services are deployed in same region"
+    - "Artifact Registry exists and CI can push images"
+    - "Firestore initialized (Native) and not destroyed on redeploy"
+    - "Cloud Tasks queue exists and API has enqueuer permission"
+    - "Agent service is invokable by Cloud Tasks (OIDC) or by API SA"
+    - "Domain DNS record set for mvp subdomain"
+    - "HTTPS certificate becomes ACTIVE"
+    - "web knows api base url (NEXT_PUBLIC_API_BASE_URL)"
+    - "CORS for API if web uses separate domain (Pattern A)"

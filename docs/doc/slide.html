@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>キメボード Slides</title>
+    <style>
+      :root {
+        --surface: #ffffff;
+        --ink: #0f172a;
+        --muted: #334155;
+        --line: #d7dfec;
+        --brand: #2563eb;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Inter", "Noto Sans JP", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 10% 0%, #dbeafe 0%, transparent 28%),
+          radial-gradient(circle at 95% 0%, #e0f2fe 0%, transparent 20%),
+          linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+      }
+      .deck {
+        width: min(1420px, calc(100vw - 28px));
+        height: min(850px, calc(100vh - 126px));
+        margin: 18px auto 10px;
+        position: relative;
+      }
+      .slide {
+        position: absolute;
+        inset: 0;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--surface);
+        box-shadow: 0 20px 46px rgba(15, 23, 42, 0.1);
+        padding: 20px 24px 22px;
+        opacity: 0;
+        transform: translateX(24px) scale(0.992);
+        transition: 0.25s ease;
+        pointer-events: none;
+        overflow: auto;
+      }
+      .slide.active {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+        pointer-events: auto;
+      }
+      .head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #e2e8f0;
+        padding-bottom: 10px;
+        margin-bottom: 12px;
+      }
+      .brand { display: inline-flex; align-items: center; gap: 10px; }
+      .brand img {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        object-fit: cover;
+      }
+      .brand span {
+        font-weight: 800;
+        color: #1d4ed8;
+        letter-spacing: 0.02em;
+      }
+      .meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .badge {
+        border: 1px solid #bfdbfe;
+        background: #eff6ff;
+        color: #1d4ed8;
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .idx {
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #334155;
+      }
+      h2 {
+        margin: 0 0 12px;
+        line-height: 1.25;
+        font-size: 30px;
+      }
+      h3 {
+        margin: 10px 0 8px;
+        line-height: 1.3;
+        font-size: 21px;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.78;
+      }
+      .lead {
+        font-size: 21px;
+        color: #1e293b;
+      }
+      .text-block {
+        display: grid;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      ul, ol {
+        margin: 10px 0 0;
+        padding-left: 22px;
+        line-height: 1.72;
+        color: #1e293b;
+      }
+      li + li { margin-top: 4px; }
+      .quote {
+        margin-top: 14px;
+        border-left: 4px solid var(--brand);
+        background: #eff6ff;
+        border-radius: 10px;
+        padding: 14px 16px;
+        color: #1e3a8a;
+        font-size: 26px;
+        font-weight: 700;
+      }
+      .small {
+        font-size: 13px;
+        color: #475569;
+      }
+      .callout {
+        margin-top: 12px;
+        border: 1px solid #bfdbfe;
+        background: #f8fbff;
+        border-radius: 12px;
+        padding: 12px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+      th, td {
+        border-bottom: 1px solid #e2e8f0;
+        text-align: left;
+        vertical-align: top;
+        padding: 8px;
+        font-size: 14px;
+      }
+      th {
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      .embed {
+        width: 100%;
+        height: 520px;
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        margin-top: 10px;
+        background: #ffffff;
+      }
+      .titles {
+        display: grid;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .title-item {
+        border: 1px solid #dbeafe;
+        background: #f8fbff;
+        border-radius: 12px;
+        padding: 12px;
+        font-size: 22px;
+        font-weight: 700;
+        color: #1e3a8a;
+      }
+      .nav {
+        width: min(1420px, calc(100vw - 28px));
+        margin: 0 auto 18px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .btn {
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        border-radius: 10px;
+        padding: 8px 14px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .counter {
+        min-width: 110px;
+        text-align: center;
+        color: #334155;
+        font-weight: 700;
+      }
+      .progress {
+        flex: 1;
+        height: 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        overflow: hidden;
+        background: #fff;
+      }
+      .bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #2563eb, #0891b2);
+        transition: width 0.22s ease;
+      }
+      @media (max-width: 980px) {
+        .embed { height: 360px; }
+        h2 { font-size: 25px; }
+        .lead { font-size: 18px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="deck" id="deck"></div>
+    <div class="nav">
+      <button id="prev" class="btn">前へ</button>
+      <div id="counter" class="counter"></div>
+      <div class="progress"><div id="bar" class="bar"></div></div>
+      <button id="next" class="btn">次へ</button>
+    </div>
+    <script>
+      const slides = [
+        {
+          section: "導入",
+          title: "キメボード: 決め切る会議への変換",
+          type: "narrative",
+          lead: "会議を、議事録の生産で終わらせず、意思決定と実行に直結させるための仕組みを示します。",
+          body: [
+            "本資料は、キメボードの価値説明だけでなく、実際に動かすための Web / API / Agent / Infra を一つの文脈で整理したプレゼン資料です。",
+            "「なぜ必要か」「何を作るか」「どう動くか」「どう運用するか」の順で、聞き手が途中で迷わない流れに再構成しています。"
+          ]
+        },
+        {
+          section: "導入",
+          title: "今日のゴール",
+          type: "points",
+          body: [
+            "聞き手がプレゼン後に次の行動を選べることをゴールに置きます。"
+          ],
+          points: [
+            "キメボードが解く課題を、業務文脈で納得できる状態にする",
+            "UI・API・Agent・Infra が矛盾なくつながる設計だと理解してもらう",
+            "PoC から実運用へ進めるときの打ち手を明確にする"
+          ]
+        },
+        {
+          section: "導入",
+          title: "アジェンダ",
+          type: "ordered",
+          body: [
+            "最初に課題と価値を押さえ、そのあとに製品設計、最後に技術設計と運用へ進みます。"
+          ],
+          points: [
+            "背景: なぜ社内PJは止まるのか",
+            "解決の軸: 決裁を構造化するとは何か",
+            "UX: どの画面で何を固定するか",
+            "実装: API・Agent・Firestore・GCP をどう接続するか",
+            "運用: セキュリティ・観測性・導入ロードマップ"
+          ]
+        },
+        {
+          section: "課題",
+          title: "背景: 社内PJが止まる最大要因",
+          type: "quote",
+          text: "で、誰が決めるの？",
+          note: "この一言に答えられない会議は、議論量に関係なく前進しません。"
+        },
+        {
+          section: "課題",
+          title: "現場で起きる三重の停滞",
+          type: "points",
+          body: [
+            "決裁者の不在は、単一問題ではなく、複数の遅延要因を連鎖させます。"
+          ],
+          points: [
+            "会議中: 合意した気になるが、正式な決定がされない",
+            "会議後: 言った言わないが発生し、責任境界がぼやける",
+            "次回まで: 宿題が回収されず、同じ論点の再議論が増える"
+          ]
+        },
+        {
+          section: "課題",
+          title: "問題の本質は議事録品質ではない",
+          type: "narrative",
+          lead: "問題の中心は「意思決定の型が欠けていること」です。",
+          body: [
+            "議事録が丁寧でも、決裁者・期限・反証条件が固定されなければ、意思決定は再解釈可能なまま残ります。",
+            "キメボードは文章を良くする道具ではなく、決裁を壊れにくいデータ構造として固定する道具です。"
+          ]
+        },
+        {
+          section: "課題",
+          title: "既存ツールとの違い",
+          type: "table",
+          body: [
+            "比較軸を明確にすることで、導入判断をしやすくします。"
+          ],
+          headers: ["観点", "一般的な議事録AI", "キメボード"],
+          rows: [
+            ["目的", "会話の文章化", "決裁の構造化と固定"],
+            ["成果物", "要約テキスト", "決裁・決裁者・期限・アクション"],
+            ["運用接続", "人手で再解釈", "そのまま実行管理へ接続"],
+            ["停滞対策", "限定的", "責任境界の明示で停滞を抑制"]
+          ]
+        },
+        {
+          section: "価値",
+          title: "キメボードの狙い",
+          type: "narrative",
+          lead: "「文章」ではなく「構造」で意思決定を扱う。",
+          body: [
+            "会議メモは入力に過ぎません。最終成果は、誰がいつまでに何を根拠に決めるか、を再利用可能な形で保存した決裁データです。",
+            "この構造化により、次回会議のアジェンダは議題の羅列ではなく、未決決裁をどう消化するかの計画になります。"
+          ]
+        },
+        {
+          section: "価値",
+          title: "決裁モデルに含める要素",
+          type: "points",
+          body: [
+            "「誰が決めるのか」を必須にし、判断の前後を追える設計にします。"
+          ],
+          points: [
+            "選択肢: 何を選べるか",
+            "決定: どれを採用したか",
+            "根拠: なぜその選択にしたか",
+            "前提 / 反証条件: 成立条件と再審条件",
+            "決裁者 / 期限: 最終責任者と決定期限",
+            "アクション: 決裁前準備(PREP)と決裁後実行(EXEC)"
+          ]
+        },
+        {
+          section: "価値",
+          title: "最短利用シナリオ",
+          type: "ordered",
+          body: [
+            "初回導入時に最短で価値が出る流れを、ユーザー行動ベースで定義します。"
+          ],
+          points: [
+            "会議メモを貼り付けて会議を作成する",
+            "決裁候補と不足質問が自動で抽出される",
+            "決裁者・期限・反証条件を埋めて READY にする",
+            "確定後に紐づくアクションを確定する",
+            "未決決裁を次回会議の消化計画として扱う",
+            "会議後に決裁ログとアクション進捗を更新する"
+          ]
+        },
+        {
+          section: "価値",
+          title: "成果指標 (KPI)",
+          type: "points",
+          body: [
+            "導入効果を議論するために、改善対象の KPI を最初に固定します。"
+          ],
+          points: [
+            "決裁リードタイム（起票から確定までの日数）",
+            "未決決裁数（滞留の可視化）",
+            "再審率（反証条件での見直し率）",
+            "期限超過率（アクション遅延率）",
+            "決裁者未設定率（最重要、ゼロを目標）"
+          ]
+        },
+        {
+          section: "UX",
+          title: "UX 設計で守る前提",
+          type: "narrative",
+          lead: "UI は「見やすさ」より先に「決裁可能状態を作る導線」を優先します。",
+          body: [
+            "各画面は情報閲覧のためでなく、状態遷移を進めるために存在します。よって CTA は常に次アクションを明示します。",
+            "今回の再整理では、ユーザーが迷いにくいよう、画面間の意味的な順序を会議起点で統一しています。"
+          ]
+        },
+        {
+          section: "UX",
+          title: "画面マップ（アジェンダは会議に統合）",
+          type: "table",
+          headers: ["ID", "画面", "役割"],
+          rows: [
+            ["S1", "プロジェクト一覧", "注力すべきPJを選ぶ入口"],
+            ["S2", "プロジェクトホーム", "未決・期限超過・未設定の把握"],
+            ["S3", "会議作成", "会議メモ投入と解析開始"],
+            ["S4", "会議詳細", "抽出結果と解析状態の確認"],
+            ["S5", "決裁詳細", "決裁要素を編集して確定可能にする"],
+            ["S6", "チャット", "不足質問への回答で情報を埋める"],
+            ["S7", "決裁ビュー", "状態別に決裁を管理・移動する"],
+            ["S9", "Exec View", "管理職向けの未整備箇所を特定する"],
+            ["会議内", "会議アジェンダ素案", "会議詳細画面内で決裁とアクション進捗を整理する"]
+          ]
+        },
+        {
+          section: "UX",
+          title: "ユーザー視点の画面遷移ストーリー",
+          type: "ordered",
+          body: [
+            "聞き手が利用イメージを持てるよう、画面遷移をタスク単位で示します。"
+          ],
+          points: [
+            "S1で対象プロジェクトを選ぶ",
+            "S2で優先決裁を把握し、会議追加へ進む",
+            "S3で会議メモを投入して解析を開始",
+            "S4で抽出された決裁を確認し、詳細編集へ進む",
+            "S5/S6で不足情報を埋め、READY_TO_DECIDE に引き上げる",
+            "S7で決裁全体を見て進捗を管理する",
+            "会議詳細内のアジェンダ素案とS9の管理職レビューで次回計画を整える"
+          ]
+        },
+        {
+          section: "UX",
+          title: "共通ナビゲーションシェルの意味",
+          type: "points",
+          body: [
+            "ヘッダー・サイドバー・右パネルを固定する理由は、操作文脈の断絶を減らすためです。"
+          ],
+          points: [
+            "ヘッダー: 検索、QuickCreate、通知で即時操作を集約",
+            "サイドバー: プロジェクト内の主導線を常に可視化",
+            "右パネル: チャット / エージェントログを文脈保持したまま参照"
+          ]
+        },
+        {
+          section: "UX",
+          title: "決裁バックログではなく「決裁ビュー」へ",
+          type: "narrative",
+          lead: "命名を「ログ」から「決裁」に寄せ、状態管理UIとして設計します。",
+          body: [
+            "決裁には通常進行の項目と滞留項目が混在するため、単なる履歴閲覧よりも、現在の意思決定管理が主目的です。",
+            "そのため S7 は NEEDS_INFO / READY_TO_DECIDE / DECIDED / REOPEN の 4 列を中心とした運用画面として扱います。"
+          ]
+        },
+        {
+          section: "UX",
+          title: "編集可能 UX の原則",
+          type: "points",
+          body: [
+            "ハリボテから次段階へ進む前提として、編集可能性を明確化しておきます。"
+          ],
+          points: [
+            "決裁詳細(S5)は全項目をインライン編集可能にする",
+            "カンバン(S7)はドラッグ&ドロップでステータス移動可能にする",
+            "会議詳細(S4)から決裁詳細(S5)への遷移を一貫させる",
+            "更新時は optimistic な見た目更新 + 失敗時のロールバック方針を持つ"
+          ]
+        },
+        {
+          section: "UX",
+          title: "不足質問チャットのデータ文脈",
+          type: "points",
+          body: [
+            "不足質問は単なるチャット履歴ではなく、どの意思決定要素を埋める質問かを明示する必要があります。"
+          ],
+          points: [
+            "対象スコープ: project > decision",
+            "詳細スコープ: project > decision > action",
+            "各メッセージに decisionId / actionId / questionId / maps_to を保持",
+            "回答反映後に readiness 判定を再計算し、状態遷移に接続"
+          ]
+        },
+        {
+          section: "ドメイン",
+          title: "ドメインモデル全体",
+          type: "table",
+          headers: ["モデル", "主な責務", "関連"],
+          rows: [
+            ["Project", "意思決定対象の業務コンテナ", "Meeting / Decision / Thread"],
+            ["Meeting", "入力ソースと解析単位", "Decision抽出の起点"],
+            ["Decision", "意思決定の中核データ", "Action / Threadと連携"],
+            ["Action", "実行タスク管理", "Decisionに従属"],
+            ["Thread", "不足質問の対話文脈", "Messageを保持"],
+            ["Message", "質問/回答/反映イベント", "Threadに従属"]
+          ]
+        },
+        {
+          section: "ドメイン",
+          title: "Decision ライフサイクル",
+          type: "ordered",
+          body: [
+            "決裁は状態遷移そのものが価値であり、状態定義の厳密さが運用品質を決めます。"
+          ],
+          points: [
+            "NEEDS_INFO: 重要項目が不足し、判断不能",
+            "READY_TO_DECIDE: 必須項目が揃い、決裁可能",
+            "DECIDED: 決裁者が確定し、判断が固定",
+            "REOPEN: 反証条件により再審へ遷移"
+          ]
+        },
+        {
+          section: "ドメイン",
+          title: "Action ライフサイクル",
+          type: "points",
+          body: [
+            "決裁だけでなく、実行管理までを同一文脈で扱うための状態定義です。"
+          ],
+          points: [
+            "TODO: 着手待ち",
+            "DOING: 実行中",
+            "DONE: 完了",
+            "BLOCKED: 依存や情報不足で停止"
+          ]
+        },
+        {
+          section: "API",
+          title: "API 設計方針",
+          type: "narrative",
+          lead: "公開APIと内部連携APIを分離し、責務を明確化します。",
+          body: [
+            "外部入力を受けるエンドポイントは zod で厳密に検証し、ドメイン不整合を早期に排除します。",
+            "Agent からの callback は internal API に限定し、トークン検証で境界を守ります。"
+          ]
+        },
+        {
+          section: "API",
+          title: "API 群 (Project / Meeting)",
+          type: "table",
+          headers: ["Endpoint", "目的", "利用画面"],
+          rows: [
+            ["POST /api/projects", "プロジェクト作成", "S1"],
+            ["GET /api/projects/:projectId", "プロジェクト取得", "S2〜S7/S9"],
+            ["POST /api/projects/:projectId/meetings", "会議作成 + 解析キック", "S3"],
+            ["GET /api/projects/:projectId/meetings/:meetingId", "会議詳細取得", "S4"]
+          ]
+        },
+        {
+          section: "API",
+          title: "API 群 (Decision / Action)",
+          type: "table",
+          headers: ["Endpoint", "目的", "利用画面"],
+          rows: [
+            ["GET /api/projects/:projectId/decisions", "決裁一覧取得", "S2/S7/S9"],
+            ["POST /api/projects/:projectId/decisions", "決裁作成(canonical)", "S5"],
+            ["PATCH /api/projects/:projectId/decisions/:decisionId", "決裁更新", "S5"],
+            ["POST /api/projects/:projectId/decisions/:decisionId/actions/bulk", "アクション一括作成", "S5"]
+          ]
+        },
+        {
+          section: "API",
+          title: "API 群 (Chat / Internal)",
+          type: "table",
+          headers: ["Endpoint", "目的", "備考"],
+          rows: [
+            ["POST /api/projects/:projectId/decisions/:decisionId/chat/thread", "スレッド作成", "質問対象の初期化"],
+            ["POST /api/chat/threads/:threadId/messages", "回答投稿 + enqueue", "不足情報反映処理へ接続"],
+            ["GET /api/chat/threads/:threadId/messages/list", "履歴表示", "S6表示用"],
+            ["POST /api/internal/agent/callback", "Agent結果反映", "X-Agent-Token 必須"]
+          ]
+        },
+        {
+          section: "API",
+          title: "zod / shared schema による整合",
+          type: "points",
+          body: [
+            "UI・API・Agent が別実装でも不整合にならないよう、入力語彙を共有します。"
+          ],
+          points: [
+            "DecisionStatus / MeetingStatus / ActionStatus の列挙を共通化",
+            "Create/Update request を shared schema で統一",
+            "callback payload の kind / status / runId を契約化",
+            "仕様変更時は spec-impl-map と schema の差分を同時更新"
+          ]
+        },
+        {
+          section: "非同期",
+          title: "なぜ Cloud Tasks を挟むのか",
+          type: "narrative",
+          lead: "会議登録を待たせず、重い解析処理を安全に分離するためです。",
+          body: [
+            "Webリクエスト内で Agent を直接叩くと、タイムアウト・再送・重複実行の制御が難しくなります。",
+            "Cloud Tasks を介すことで、リトライ方針・同時実行数・認証を一元管理できます。"
+          ]
+        },
+        {
+          section: "非同期",
+          title: "非同期実行シーケンス",
+          type: "ordered",
+          points: [
+            "Web が API に会議作成を依頼",
+            "API が Firestore に Meeting(ANALYZING) を保存",
+            "API が Cloud Tasks に workflow 実行依頼を enqueue",
+            "Cloud Tasks が Agent エンドポイントを OIDC で呼び出し",
+            "Agent が処理して internal callback を API に返却",
+            "API が Decision / Action / Thread / Message を更新"
+          ]
+        },
+        {
+          section: "Agent",
+          title: "Agent 全体責務",
+          type: "points",
+          body: [
+            "Agent は推論だけでなく、処理の責任境界を分けるオーケストレーション層です。"
+          ],
+          points: [
+            "meeting_structurer: 会議メモから決裁候補と不足質問を生成",
+            "reply_integrator: 回答を反映し、決裁データを更新候補化",
+            "draft_actions_skill: PREP/EXEC アクション草案を生成",
+            "root_agent: 実行制御・冪等性・失敗時の扱いを統括"
+          ]
+        },
+        {
+          section: "Agent",
+          title: "meeting_structurer の実行内容",
+          type: "ordered",
+          points: [
+            "Meeting本文と関連メタデータを取得",
+            "決裁候補を抽出し、既存Decisionとの重複候補を照合",
+            "不足項目を質問に分解し、maps_to を付与",
+            "結果を callback payload にまとめて API に返却"
+          ]
+        },
+        {
+          section: "Agent",
+          title: "reply_integrator の実行内容",
+          type: "points",
+          points: [
+            "回答メッセージを解析し、どの項目へ反映するか判定",
+            "decisionId/actionId 単位で patch 候補を組み立て",
+            "必要なら owner / dueAt / criteria / options を更新候補化",
+            "API 側で readiness 条件を再計算し、状態を遷移"
+          ]
+        },
+        {
+          section: "Agent",
+          title: "draft_actions_skill の実行内容",
+          type: "points",
+          points: [
+            "決裁前に必要な PREP と、決裁後の EXEC を分離して提案",
+            "担当候補・期限候補・説明文を揃えて bulk create に接続",
+            "会議直後でも行動に変換できる粒度に落とし込む"
+          ]
+        },
+        {
+          section: "Agent",
+          title: "重複実行と失敗耐性",
+          type: "points",
+          points: [
+            "idempotencyKey を payload に持たせ、再送時の二重反映を防止",
+            "runId を記録し、同一 run の重複 callback を無害化",
+            "FAILED 時も callback で理由を反映し、UIで原因を可視化"
+          ]
+        },
+        {
+          section: "データ",
+          title: "Firestore コレクション設計",
+          type: "table",
+          headers: ["Collection", "用途", "主キー例"],
+          rows: [
+            ["projects", "PJの親情報", "prj_01"],
+            ["meetings", "会議原文・解析状態", "mtg_01"],
+            ["decisions", "決裁構造データ", "dcs_01"],
+            ["actions", "実行タスク", "act_01"],
+            ["threads", "不足質問スレッド", "thd_01"],
+            ["messages", "質問/回答メッセージ", "msg_01"],
+            ["notifications", "イベント通知", "ntf_01"]
+          ]
+        },
+        {
+          section: "データ",
+          title: "重要インデックスとクエリ",
+          type: "points",
+          body: [
+            "画面速度と運用指標の両方に効くインデックスを優先します。"
+          ],
+          points: [
+            "decisions(status, dueAt): 状態別一覧と期限管理",
+            "decisions(owner.userId, status, dueAt): 決裁者別の滞留確認",
+            "decisions(mergeStatus, updatedAt): 重複統合の監視",
+            "meetings(status, updatedAt): 解析待ち/失敗の追跡",
+            "notifications(eventType, createdAt): 通知表示の時系列取得"
+          ]
+        },
+        {
+          section: "設計図",
+          title: "GCP サービス詳細図",
+          type: "embed",
+          body: [
+            "以下はサービス単位で分解した設計図です。プレゼンでは、まず Edge、次に App Plane、最後に Provisioning Plane の順で説明すると伝わります。"
+          ],
+          note: "図中の色は、稼働中 / 任意 / 計画の区分を示します。",
+          src: "./architecture.html#gcp-map"
+        },
+        {
+          section: "Infra",
+          title: "Terraform モジュールの責務分割",
+          type: "table",
+          headers: ["module", "作成対象", "狙い"],
+          rows: [
+            ["foundation", "IAM / SA / Secret / Artifact", "環境差異に強い基盤初期化"],
+            ["db", "Firestore", "データ層を独立適用可能にする"],
+            ["adk", "Cloud Tasks", "非同期処理の単独反映を可能にする"],
+            ["cloud_run", "web / api / agent", "アプリ層の個別更新に対応"]
+          ]
+        },
+        {
+          section: "Infra",
+          title: "個別実行と一括実行の運用",
+          type: "points",
+          points: [
+            "事前に `glogin.ps1` で gcloud login / ADC / project を統一",
+            "個別適用: `infra.ps1 -Action apply -Component db` など",
+            "一括適用: `infra.ps1 -Action apply -Component all`",
+            "本番反映前提のスキーマ変更は infra 側 migration notes に追記"
+          ],
+          callout: "本番デプロイテストはまだ行わない方針のため、手順は「再現可能な検証環境構築」に重点を置いています。"
+        },
+        {
+          section: "Infra",
+          title: "公開方式の選択",
+          type: "table",
+          headers: ["パターン", "構成", "判断基準"],
+          rows: [
+            ["A: 分離ドメイン", "mvp / api-mvp を別公開", "MVPでは推奨。構成が単純で障害点が少ない"],
+            ["B: 単一ドメイン", "HTTPS LB + NEG + URL Map", "UI/APIを同一ドメインに統合したい場合に選択"]
+          ]
+        },
+        {
+          section: "運用",
+          title: "セキュリティ境界",
+          type: "points",
+          points: [
+            "internal callback は `X-Agent-Token` を必須化",
+            "秘密情報は Secret Manager のみで管理し、平文 env を避ける",
+            "Cloud Tasks から Agent 呼び出しは OIDC で実行主体を固定",
+            "公開APIの認証・認可は次フェーズで強化（SEC-001）"
+          ]
+        },
+        {
+          section: "運用",
+          title: "観測性と障害対応",
+          type: "points",
+          body: [
+            "障害時に「どこで止まったか」を追えることを第一要件に置きます。"
+          ],
+          points: [
+            "Cloud Logging に web/api/agent/tasks のログを集約",
+            "runId / taskId / decisionId をログに残し相互追跡可能にする",
+            "FAILED callback を UI で可視化し、再実行導線を用意",
+            "将来は Monitoring / Alerting / Error Reporting を追加"
+          ]
+        },
+        {
+          section: "運用",
+          title: "ローカル検証の進め方",
+          type: "ordered",
+          points: [
+            "`docs/local/README.md` の手順で Web/API/Agent を起動",
+            "ダミーデータで S1→S7 と S9 の導線を確認",
+            "meeting 作成から callback 反映までを通しで確認",
+            "仕様差分があれば `spec-impl-map` と関連 schema を同時更新"
+          ]
+        },
+        {
+          section: "総括",
+          title: "ここまでの要点",
+          type: "points",
+          points: [
+            "課題起点で UI/データ/非同期/運用を一本の文脈に統合した",
+            "不足質問チャットは decision/action 文脈を保持する設計へ整理した",
+            "GCPサービス単位で構成を分解し、個別実行・一括実行の両運用を担保した",
+            "不整合は schema と spec-impl-map を同時更新する運用に統一した"
+          ]
+        },
+        {
+          section: "総括",
+          title: "次アクション",
+          type: "ordered",
+          points: [
+            "SEC-001: 公開APIの認証・認可方針を決定して実装",
+            "API-001: CreateDecisionRequest の shared schema 完全統一",
+            "DATA-001: meeting raw 保管方式の最終決定（必要なら GCS）",
+            "S7: ドラッグ&ドロップで状態更新する操作を本実装化"
+          ],
+          callout: "この順で進めると、プレゼン内容と実装の優先順位が一致し、説明と開発の両方が迷いにくくなります。"
+        }
+      ];
+
+      function renderBody(s) {
+        const body = renderParagraphs(s.body);
+        const lead = s.lead ? `<p class="lead">${s.lead}</p>` : "";
+        const callout = s.callout ? `<div class="callout"><p>${s.callout}</p></div>` : "";
+        if (s.type === "narrative") return `${lead}${body}${renderList(s.points)}${callout}`;
+        if (s.type === "points") return `${body}${renderList(s.points)}${callout}`;
+        if (s.type === "ordered") return `${body}${renderList(s.points, true)}${callout}`;
+        if (s.type === "quote") return `<div class="quote">「${s.text}」</div><p style="margin-top:10px;">${s.note ?? ""}</p>`;
+        if (s.type === "table") return `${body}${renderTable(s.headers, s.rows)}${callout}`;
+        if (s.type === "embed") return `${body}<p class="small">${s.note ?? ""}</p><iframe class="embed" src="${s.src}" title="architecture"></iframe>${callout}`;
+        if (s.type === "titles") return `${body}<div class="titles">${s.titles.map((t) => `<div class="title-item">${t}</div>`).join("")}</div>${callout}`;
+        return `${lead}${body}${callout}`;
+      }
+
+      function renderParagraphs(paragraphs) {
+        if (!paragraphs || !paragraphs.length) return "";
+        return `<div class="text-block">${paragraphs.map((p) => `<p>${p}</p>`).join("")}</div>`;
+      }
+
+      function renderList(items, ordered = false) {
+        if (!items || !items.length) return "";
+        const tag = ordered ? "ol" : "ul";
+        return `<${tag}>${items.map((i) => `<li>${i}</li>`).join("")}</${tag}>`;
+      }
+
+      function renderTable(headers, rows) {
+        return `
+          <table>
+            <thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
+            <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody>
+          </table>
+        `;
+      }
+
+      const deck = document.getElementById("deck");
+      const prev = document.getElementById("prev");
+      const next = document.getElementById("next");
+      const counter = document.getElementById("counter");
+      const bar = document.getElementById("bar");
+      let current = 0;
+
+      function renderSlides() {
+        deck.innerHTML = slides.map((s, i) => `
+          <section class="slide${i === 0 ? " active" : ""}">
+            <div class="head">
+              <div class="brand">
+                <img src="./assets/icon-only.png" alt="logo" />
+                <span>キメボード</span>
+              </div>
+              <div class="meta">
+                <span class="badge">${s.section}</span>
+                <span class="idx">${i + 1} / ${slides.length}</span>
+              </div>
+            </div>
+            <h2>${s.title}</h2>
+            ${renderBody(s)}
+          </section>
+        `).join("");
+      }
+
+      function go(idx) {
+        current = Math.max(0, Math.min(slides.length - 1, idx));
+        const nodes = Array.from(document.querySelectorAll(".slide"));
+        nodes.forEach((n, i) => n.classList.toggle("active", i === current));
+        prev.disabled = current === 0;
+        next.disabled = current === slides.length - 1;
+        counter.textContent = `${current + 1} / ${slides.length}`;
+        bar.style.width = `${((current + 1) / slides.length) * 100}%`;
+      }
+
+      renderSlides();
+      go(0);
+      prev.addEventListener("click", () => go(current - 1));
+      next.addEventListener("click", () => go(current + 1));
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight" || e.key === "PageDown") go(current + 1);
+        if (e.key === "ArrowLeft" || e.key === "PageUp") go(current - 1);
+        if (e.key === "Home") go(0);
+        if (e.key === "End") go(slides.length - 1);
+      });
+    </script>
+  </body>
+</html>

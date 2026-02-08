@@ -1,0 +1,452 @@
+packages_shared_spec:
+  package_name: "@kimeboard/shared"
+  location: "packages/shared"
+  purpose:
+    - "ドメインモデル（Project/Meeting/Decision/Action/Chat）を1箇所で管理"
+    - "APIのRequest/Response DTOとバリデーション（Zod）を共有"
+    - "UIが参照する状態ラベル・色・表示文言の辞書を共有"
+    - "Decisionのcomplete判定やstatus遷移ルールを共有"
+  consumers:
+    - "apps/web (Next.js)"
+    - "apps/api (Next.js route handlers)"
+    - "apps/agent (Python)  ※型はJSON Schemaを出力して合わせる"
+  tech_choices:
+    language: "TypeScript"
+    validation: "Zod"
+    schema_export:
+      for_agent: "JSON Schemaを生成して agent 側で参照（任意・MVPは後回しOK）"
+  monorepo:
+    package_manager: "pnpm (recommended)"
+    build: "tsup or tsc (either)"
+    module_format: "ESM preferred"
+    lint: "eslint (optional)"
+  directory_structure:
+    packages/shared:
+      - "README.md"
+      - "package.json"
+      - "tsconfig.json"
+      - "src/index.ts"
+      - "src/version.ts"
+      - "src/constants/"
+      - "src/constants/status.ts"
+      - "src/constants/roles.ts"
+      - "src/constants/tags.ts"
+      - "src/constants/limits.ts"
+      - "src/constants/routes.ts"
+      - "src/constants/errors.ts"
+      - "src/i18n/"
+      - "src/i18n/ja.ts"
+      - "src/domain/"
+      - "src/domain/project.ts"
+      - "src/domain/meeting.ts"
+      - "src/domain/decision.ts"
+      - "src/domain/action.ts"
+      - "src/domain/chat.ts"
+      - "src/domain/notification.ts"
+      - "src/dto/"
+      - "src/dto/projects.ts"
+      - "src/dto/meetings.ts"
+      - "src/dto/decisions.ts"
+      - "src/dto/actions.ts"
+      - "src/dto/chat.ts"
+      - "src/dto/agendas.ts"
+      - "src/dto/notifications.ts"
+      - "src/rules/"
+      - "src/rules/decision_readiness.ts"
+      - "src/rules/decision_merge.ts"
+      - "src/rules/meeting_extract.ts"
+      - "src/rules/agenda_builder.ts"
+      - "src/utils/"
+      - "src/utils/id.ts"
+      - "src/utils/time.ts"
+      - "src/utils/text.ts"
+      - "src/utils/result.ts"
+      - "src/utils/assert.ts"
+      - "src/compat/"
+      - "src/compat/firestore.ts"
+      - "src/compat/http.ts"
+
+  exports:
+    entrypoints:
+      - "src/index.ts"
+    index_exports:
+      - "constants/*"
+      - "domain/*"
+      - "dto/*"
+      - "rules/*"
+      - "utils/*"
+      - "i18n/ja"
+
+  versioning:
+    strategy: "semver"
+    current: "0.1.0"
+    compatibility:
+      - "DTO変更は breaking になりやすいので慎重"
+      - "UI文言（i18n）は追加はOK、削除は注意"
+
+  # =========================
+  # 1) constants（語彙統一）
+  # =========================
+  constants:
+    status:
+      DecisionStatus:
+        - "NEEDS_INFO"
+        - "READY_TO_DECIDE"
+        - "DECIDED"
+        - "REOPEN"
+        - "ARCHIVED"
+      MeetingStatus:
+        - "DRAFT"
+        - "ANALYZING"
+        - "DONE"
+        - "FAILED"
+      ActionStatus:
+        - "TODO"
+        - "DOING"
+        - "DONE"
+        - "BLOCKED"
+      ActionType:
+        - "PREP"
+        - "EXEC"
+      ChatFormat:
+        - "TEXT"
+        - "QUESTION_SET"
+        - "ANSWER_SET"
+      NotificationEventType:
+        - "DECISION_NEEDS_INFO"
+        - "DECISION_READY_TO_DECIDE"
+        - "DECISION_DECIDED"
+        - "AGENT_RUN_FAILED"
+        - "DRAFT_ACTIONS_CREATED"
+    roles:
+      ProjectRole:
+        - "OWNER"
+        - "ADMIN"
+        - "MEMBER"
+        - "VIEWER"
+    limits:
+      decision:
+        max_options: 5
+        max_quotes: 3
+        max_tags: 10
+      chat:
+        max_questions_per_set: 3
+      meeting:
+        max_extract_decisions: 6
+    routes:
+      web:
+        projects: "/projects"
+        project_home: "/p/:projectId"
+        meeting_new: "/p/:projectId/meetings/new"
+        meeting_detail: "/p/:projectId/meetings/:meetingId"
+        decision_backlog: "/p/:projectId/decisions"
+        decision_detail: "/p/:projectId/decisions/:decisionId"
+        agenda_new: "/p/:projectId/agendas/new"
+        exec_view: "/p/:projectId/exec"
+    errors:
+      codes:
+        - "UNAUTHORIZED"
+        - "FORBIDDEN"
+        - "NOT_FOUND"
+        - "VALIDATION_ERROR"
+        - "CONFLICT"
+        - "RATE_LIMITED"
+        - "INTERNAL"
+
+  # =========================
+  # 2) domain（DBに近い形の型）
+  # =========================
+  domain:
+    Project:
+      fields:
+        projectId: "string"
+        name: "string"
+        description: "string?"
+        status: "ACTIVE|ARCHIVED"
+        counters: "object?"
+        createdAt: "string(ISO)|timestamp"
+        updatedAt: "string(ISO)|timestamp"
+    Meeting:
+      fields:
+        meetingId: "string"
+        projectId: "string"
+        title: "string"
+        heldAt: "string(ISO)?"
+        participants: "string[]?"
+        source:
+          type: "PASTE|NOTION|TLDV|WEBHOOK|API"
+          connectorId: "string?"
+        raw:
+          storage: "FIRESTORE|GCS"
+          text: "string?"
+          gcsUri: "string?"
+          checksum: "string?"
+        status: "DRAFT|ANALYZING|DONE|FAILED"
+        extracted:
+          decisionIds: "string[]?"
+          mergeCandidates: "object[]?"
+        agent:
+          lastRunId: "string?"
+          lastRunStatus: "RUNNING|SUCCEEDED|FAILED?"
+          idempotencyKey: "string?"
+        createdAt: "string(ISO)"
+        updatedAt: "string(ISO)"
+    Decision:
+      fields:
+        decisionId: "string"
+        projectId: "string"
+        title: "string"
+        summary: "string?"
+        tags: "string[]?"
+        status: "DecisionStatus"
+        owner:
+          userId: "string?"
+          displayName: "string?"
+          source: "MANUAL|AGENT_SUGGESTION?"
+        dueAt: "string(ISO)?"
+        priority: "LOW|MEDIUM|HIGH"
+        options:
+          - id: "string"
+            label: "string"
+            description: "string?"
+            recommended: "boolean?"
+        criteria: "string[]?"
+        assumptions: "string[]"
+        reopenTriggers: "string[]"
+        rationale:
+          pros: "string[]"
+          cons: "string[]"
+          conditions: "string[]"
+        completeness:
+          score: "number(0..100)"
+          missingFields: "string[]"
+          lastEvaluatedAt: "string(ISO)?"
+        linkage:
+          linkedMeetingIds: "string[]"
+          lastMentionedAt: "string(ISO)?"
+        merge:
+          mergeStatus: "NONE|CANDIDATE|MERGED"
+          requiresHumanApproval: "boolean"
+          mergeCandidates:
+            - candidateDecisionId: "string"
+              score: "number(0..1)"
+              reason: "string?"
+        createdAt: "string(ISO)"
+        updatedAt: "string(ISO)"
+    Action:
+      fields:
+        actionId: "string"
+        projectId: "string"
+        decisionId: "string"
+        type: "ActionType"
+        title: "string"
+        description: "string?"
+        assignee:
+          userId: "string?"
+          displayName: "string?"
+        dueAt: "string(ISO)?"
+        status: "ActionStatus"
+        blockedReason: "string?"
+        createdAt: "string(ISO)"
+        updatedAt: "string(ISO)"
+    Chat:
+      Thread:
+        fields:
+          threadId: "string"
+          projectId: "string"
+          decisionId: "string?"
+          channel: "IN_APP|WEBHOOK|EMAIL|SLACK|TEAMS"
+          title: "string?"
+          lastMessageAt: "string(ISO)?"
+      Message:
+        fields:
+          messageId: "string"
+          threadId: "string"
+          senderType: "AGENT|USER|SYSTEM"
+          format: "ChatFormat"
+          content: "string"
+          metadata: "object?"
+          createdAt: "string(ISO)"
+    Notification:
+      fields:
+        notificationId: "string"
+        projectId: "string"
+        eventType: "NotificationEventType"
+        title: "string"
+        body: "string"
+        link: { route: "string" }
+        createdAt: "string(ISO)"
+        readAt: "string(ISO)?"
+
+  # =========================
+  # 3) dto（API境界：Request/Response）
+  # =========================
+  dto:
+    shared_envelope:
+      ErrorResponse:
+        fields:
+          code: "errors.codes"
+          message: "string"
+          details: "object?"
+      Paginated:
+        fields:
+          items: "T[]"
+          cursor?: "string"
+    projects:
+      CreateProjectRequest:
+        fields: { name: "string", description: "string?" }
+      CreateProjectResponse:
+        fields: { projectId: "string" }
+    meetings:
+      CreateMeetingRequest:
+        fields:
+          title: "string"
+          heldAt: "string(ISO)?"
+          participants: "string[]?"
+          sourceType: "PASTE|NOTION|TLDV|WEBHOOK|API"
+          rawText: "string"
+      CreateMeetingResponse:
+        fields: { meetingId: "string", status: "ANALYZING" }
+    decisions:
+      DecisionSummary:
+        fields:
+          decisionId: "string"
+          title: "string"
+          status: "DecisionStatus"
+          ownerDisplayName: "string?"
+          dueAt: "string(ISO)?"
+          priority: "LOW|MEDIUM|HIGH"
+          completenessScore: "number"
+          ownerMissing: "boolean?"
+      PatchDecisionRequest:
+        fields: "partial Decision (safe subset)"
+      PatchDecisionResponse:
+        fields: { decision: "Decision" }
+    chat:
+      CreateThreadRequest:
+        fields: { channel: "IN_APP|WEBHOOK|EMAIL|SLACK|TEAMS" }
+      CreateThreadResponse:
+        fields: { threadId: "string" }
+      PostMessageRequest:
+        fields:
+          senderType: "AGENT|USER|SYSTEM"
+          format: "ChatFormat"
+          content: "string"
+          metadata: "object?"
+      PostMessageResponse:
+        fields: { messageId: "string" }
+    agendas:
+      GenerateAgendaRequest:
+        fields: { projectId: "string", horizon: "THIS_WEEK|NEXT_WEEK|CUSTOM" }
+      GenerateAgendaResponse:
+        fields: { agendaDraft: "object", decisionIds: "string[]" }
+
+  # =========================
+  # 4) rules（判定/遷移/計算）
+  # =========================
+  rules:
+    decision_readiness:
+      inputs: ["Decision"]
+      outputs:
+        completenessScore: "number"
+        missingFields: "string[]"
+        derivedFlags:
+          ownerMissing: "boolean"
+          dueMissing: "boolean"
+          optionsMissing: "boolean"
+          criteriaMissing: "boolean"
+      readiness_thresholds:
+        ready_to_decide: 80
+      required_fields_for_ready:
+        - "title"
+        - "owner.userId OR owner.displayName"
+        - "dueAt"
+        - "criteria"
+        - "options (>=2 recommended)"
+      status_transition:
+        from_NEEDS_INFO_to_READY:
+          condition: "missingFields empty OR completenessScore >= ready_to_decide"
+        from_READY_to_DECIDED:
+          condition: "decide action executed by user (not agent)"
+    decision_merge:
+      policy:
+        auto_merge: false
+        always_requires_human_approval: true
+      scoring_guidance:
+        high_confidence: ">=0.85"
+        medium: "0.65..0.84"
+        low: "<0.65"
+      behavior:
+        - "high_confidenceでもCANDIDATE止まり"
+        - "UIに候補を出すためのreasonを必須にする"
+    agenda_builder:
+      inputs:
+        - "Decision[] (status, dueAt, owner, missingFields)"
+        - "Actions[] (overdue)"
+      output:
+        - "AgendaDraft with three buckets: READY / NEEDS_INFO / REOPEN"
+      heuristics:
+        - "READYはdueが近い順"
+        - "NEEDS_INFOはmissingFieldsの種類でまとめる"
+        - "REOPENはreopenTriggersが発火したもの優先（MVPは手動でもOK）"
+
+  # =========================
+  # 5) i18n（表示文言の統一）
+  # =========================
+  i18n:
+    ja:
+      status_labels:
+        decision:
+          NEEDS_INFO: "情報不足"
+          READY_TO_DECIDE: "決められる"
+          DECIDED: "確定"
+          REOPEN: "再審"
+          ARCHIVED: "アーカイブ"
+        meeting:
+          DRAFT: "下書き"
+          ANALYZING: "解析中"
+          DONE: "完了"
+          FAILED: "失敗"
+      ui:
+        cta:
+          add_meeting: "会議メモを追加"
+          decide: "確定"
+          generate_actions: "素案生成"
+        hints:
+          missing_owner: "決裁者が未設定です"
+          missing_due: "期限が未設定です"
+
+  # =========================
+  # 6) utils（全アプリ共通の小物）
+  # =========================
+  utils:
+    id:
+      ulid: true
+      helpers:
+        - "newId()"
+        - "isValidId()"
+    time:
+      helpers:
+        - "nowIso()"
+        - "toIso(date)"
+        - "parseIso(str)"
+    text:
+      helpers:
+        - "truncate(str, max)"
+        - "normalizeWhitespace(str)"
+    result:
+      pattern: "Result<T, E>"
+      helpers: ["ok()", "err()"]
+
+  # =========================
+  # 7) domain: ドメイン生成（サブドメイン規約）
+  # =========================
+  domain_routing_helpers:
+    inputs:
+      apex_domain: "string (例: example.com)"
+      env: "mvp"
+    outputs:
+      web_domain: "mvp.${apex_domain}"
+      api_domain: "api-mvp.${apex_domain}"
+    notes:
+      - "infraとweb両方が同じロジックでURLを作れるようにsharedへ置く"

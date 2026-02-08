@@ -1,0 +1,50 @@
+{
+  "projectId": "prj_xxx",
+  "kind": "meeting_structurer",
+  "status": "SUCCEEDED",
+  "meetingId": "mtg_xxx",
+  "idempotencyKey": "mtg_xxx",
+  "extracted": {
+    "decisions": [
+      {
+        "decisionId": "dcs_xxx",
+        "title": "配送業者をA社に切り替えるか",
+        "summary": "コストと遅延率の改善が狙い",
+        "ownerDisplayName": "部長A",
+        "dueAt": "2026-02-15T00:00:00.000Z",
+        "options": [
+          {
+            "label": "A社に切替",
+            "recommended": true
+          },
+          {
+            "label": "現状維持"
+          }
+        ],
+        "criteria": [
+          "月次コスト",
+          "遅延率"
+        ]
+      }
+    ],
+    "questionSets": [
+      {
+        "decisionRef": {
+          "decisionId": "dcs_xxx",
+          "title": "配送業者をA社に切り替えるか"
+        },
+        "hint": "決裁に必要な情報が不足しています",
+        "questions": [
+          {
+            "qid": "q1",
+            "type": "date",
+            "text": "切替の希望期限はいつですか？",
+            "maps_to": {
+              "decision_field": "dueAt"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,64 @@
+navigation_graph:
+  nodes:
+    - { id: "S1", name: "プロジェクト一覧", route: "/projects" }
+    - { id: "S2", name: "プロジェクトホーム", route: "/p/:projectId" }
+    - { id: "S3", name: "会議作成（メモ貼り付け）", route: "/p/:projectId/meetings/new" }
+    - { id: "S4", name: "会議詳細（解析結果）", route: "/p/:projectId/meetings/:meetingId" }
+    - { id: "S5", name: "決裁詳細（構造化ビュー）", route: "/p/:projectId/decisions/:decisionId" }
+    - { id: "S6", name: "アプリ内チャット（Q&A）", route: "/p/:projectId/chat?decisionId=:decisionId" }
+    - { id: "S7", name: "決裁バックログ（カンバン/リスト）", route: "/p/:projectId/decisions" }
+    - { id: "S8", name: "会議アジェンダ生成", route: "/p/:projectId/agendas/new" }
+    - { id: "S9", name: "管理職ビュー", route: "/p/:projectId/exec" }
+
+  global_shell_routes:
+    sidebar:
+      dashboard: { from: "*", to: "S2" }
+      decisions:  { from: "*", to: "S7" }
+      meetings:   { from: "*", to: "S4", note: "会議一覧は後で追加してもOK。MVPは直リンクでも可" }
+      agendas:    { from: "*", to: "S8" }
+      exec:       { from: "*", to: "S9" }
+    header:
+      project_switcher:
+        from: "*"
+        to: "S2"
+        behavior: "projectId切替でダッシュボードへ"
+      global_search:
+        from: "*"
+        to: "S5"
+        behavior: "検索結果: decision/meeting/action を同一UIで表示。クリックで該当詳細へ"
+      quick_create:
+        new_meeting: { from: "*", to: "S3" }
+        new_decision: { from: "*", to: "S5", note: "空のdecision作成後に詳細へ遷移" }
+        new_action: { from: "*", to: "S5", note: "対象decision選択を挟む（後で）" }
+
+  edges:
+    # Project
+    - { from: "S1", action: "click_project_card", to: "S2", data: ["projectId"] }
+    - { from: "S1", action: "create_project_modal_submit", to: "S2", data: ["projectId"], feedback: "toast_confirm" }
+
+    # Meeting creation flow
+    - { from: "S2", action: "cta_add_meeting_memo", to: "S3" }
+    - { from: "S3", action: "save_and_analyze", to: "S4", data: ["meetingId"], feedback: ["toast_confirm", "ANALYZING state"] }
+    - { from: "S4", action: "agent_failed_retry", to: "S4", feedback: ["ANALYZING state"] }
+
+    # Decision drill-down
+    - { from: "S4", action: "click_decision_detail", to: "S5", data: ["decisionId"] }
+    - { from: "S4", action: "click_needs_info_decision", to: "S6", data: ["decisionId"], feedback: ["right_panel_slide"] }
+
+    # Chat loop
+    - { from: "S6", action: "submit_answers", to: "S5", data: ["decisionId"], feedback: ["toast_confirm", "state_chip_morph"], note: "回答取り込み後、READY_TO_DECIDEに上がったらS5の確定ボタンが活性" }
+    - { from: "S5", action: "open_chat_for_missing_info", to: "S6", data: ["decisionId"], feedback: ["right_panel_slide"] }
+
+    # Backlog + Exec + Agenda
+    - { from: "S2", action: "open_backlog_snapshot_item", to: "S5", data: ["decisionId"] }
+    - { from: "S2", action: "open_agenda_snapshot", to: "S8" }
+    - { from: "S7", action: "click_decision_card", to: "S5", data: ["decisionId"] }
+    - { from: "S9", action: "click_owner_missing_row", to: "S5", data: ["decisionId"] }
+    - { from: "S9", action: "click_build_weekly_agenda", to: "S8" }
+
+    # Decide action
+    - { from: "S5", action: "click_decide_button", to: "S5", feedback: ["toast_confirm", "state_chip_morph"], note: "DECIDEDへ遷移。Exec Actionsタブを強調" }
+
+  stateful_returns:
+    - { name: "back_navigation", rule: "詳細(S5/S4)から戻ると直前の一覧/ダッシュに戻る。フィルタ・スクロール位置保持" }
+    - { name: "deep_link", rule: "S4/S5/S6はURL直アクセスで成立。存在しない場合は404より『Project選択』へ誘導" }

@@ -1,0 +1,445 @@
+mvp:
+  meta:
+    product_name: "キメボード"
+    version: "0.1.0-mvp"
+    purpose:
+      - "社内PJの会議メモ（議事録）から、決裁（選択肢）を抽出して可視化する"
+      - "不足情報を質問として投げ、決裁を『決められる状態』まで整える"
+      - "決裁に紐づくアクションを管理し、会議アジェンダ生成の足場にする"
+    non_goals_mvp:
+      - "リアルタイム文字起こし・録音取り込み（tldv/Notion連携は拡張）"
+      - "外部チャット/メール送信（Slack/Teams/Email/Webhookは拡張）"
+      - "厳密な権限管理/監査ログ/SSO（MVPは簡略）"
+      - "自動マージ/自動確定（人間承認前提）"
+    target_user:
+      - "社内PJの推進役（PM/PO/部門横断調整）"
+      - "決裁者（部長/役員）とその周辺の実務者"
+    device:
+      primary: "PC"
+      mobile: "MVPでは最適化対象外（閲覧最低限のレスポンシブは後回し）"
+
+  system_overview:
+    repos:
+      - name: "packages/shared"
+        role: "ドメイン/DTO/ルール（Zod）を共通化"
+      - name: "apps/api"
+        role: "Next.js Route Handlers API。Firestore・Cloud Tasks・Callback受け"
+      - name: "apps/web"
+        role: "Next.js UI（今回は仕様のみ。実装は別）"
+      - name: "apps/agent"
+        role: "ADK（想定）で会議解析・質問生成・回答反映・アクション素案を生成"
+    gcp:
+      runtime: "Cloud Run（api/agent/web）"
+      database: "Firestore"
+      async: "Cloud Tasks（API -> Agentの起動）"
+      optional:
+        - "Cloud Logging / Error Reporting"
+        - "Secret Manager"
+        - "Cloud Scheduler（定期実行が必要になったら）"
+
+  domain_model:
+    ids:
+      format:
+        projectId: "prj_<uuid|ulid>"
+        meetingId: "mtg_<uuid|ulid>"
+        decisionId: "dcs_<uuid|ulid>"
+        actionId: "act_<uuid|ulid>"
+        threadId: "thr_<uuid|ulid>"
+        messageId: "msg_<uuid|ulid>"
+        notificationId: "ntf_<uuid|ulid>"
+        runId: "run_<uuid|ulid>"
+      note: "現状は crypto.randomUUID() フォールバックを許容（shared/utils/id.ts）"
+    statuses:
+      decision: ["NEEDS_INFO", "READY_TO_DECIDE", "DECIDED", "REOPEN", "ARCHIVED"]
+      meeting: ["DRAFT", "ANALYZING", "DONE", "FAILED"]
+      action: ["TODO", "DOING", "DONE", "BLOCKED"]
+    core_entities:
+      Project:
+        required: ["projectId", "name"]
+        optional: ["description", "status", "tags", "counters", "createdAt", "updatedAt"]
+      Meeting:
+        required: ["meetingId", "projectId", "title", "source", "raw", "status"]
+        optional: ["heldAt", "participants", "extracted", "agent", "createdAt", "updatedAt"]
+      Decision:
+        required: ["decisionId", "projectId", "title", "status", "priority", "options", "completeness", "linkage", "merge"]
+        optional: ["summary", "tags", "owner", "dueAt", "criteria", "assumptions", "reopenTriggers", "rationale", "createdAt", "updatedAt"]
+      Action:
+        required: ["actionId", "projectId", "decisionId", "type", "title", "status"]
+        optional: ["description", "assignee", "dueAt", "blockedReason", "createdAt", "updatedAt"]
+      Thread:
+        required: ["threadId", "projectId", "channel"]
+        optional: ["decisionId", "title", "lastMessageAt"]
+      Message:
+        required: ["messageId", "threadId", "senderType", "format", "content"]
+        optional: ["metadata", "createdAt"]
+      Notification:
+        required: ["notificationId", "projectId", "eventType", "title", "body", "link"]
+        optional: ["createdAt", "readAt"]
+
+  firestore:
+    collections:
+      projects:
+        path: "projects/{projectId}"
+        indexes_mvp:
+          - "name (manual search later)"
+      meetings:
+        path: "meetings/{meetingId}"
+        indexes_mvp:
+          - "projectId + updatedAt desc（必要になったら）"
+      decisions:
+        path: "decisions/{decisionId}"
+        indexes_mvp:
+          - "projectId == + updatedAt desc"
+          - "projectId == + status == + updatedAt desc（status filter用）"
+      actions:
+        path: "actions/{actionId}"
+        indexes_mvp:
+          - "decisionId == + updatedAt desc（将来）"
+      threads:
+        path: "threads/{threadId}"
+        subcollections:
+          messages:
+            path: "threads/{threadId}/messages/{messageId}"
+            indexes_mvp:
+              - "createdAt desc"
+        indexes_mvp:
+          - "projectId == + decisionId ==（ensureDecisionThread用）"
+      notifications:
+        path: "notifications/{notificationId}"
+        indexes_mvp:
+          - "projectId == + createdAt desc"
+      agent_runs:
+        path: "agent_runs/{runId}"
+        note: "MVPでは未活用でもよいが、後で可観測性に効く"
+    notes:
+      - "現状の実装はトップレベル collection を中心に使用"
+      - "Project配下サブコレクションに寄せる設計もあるが、MVPは単純優先"
+      - "マルチテナント化するなら projectId を必ず where に入れる運用が重要"
+
+  api:
+    tech:
+      framework: "Next.js Route Handlers（Node runtime）"
+      validation: "Zod（shared + api内schema）"
+      error_format:
+        shape: "{ code, message, details? }"
+        codes: ["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "VALIDATION_ERROR", "CONFLICT", "RATE_LIMITED", "INTERNAL"]
+    env:
+      required:
+        - "GOOGLE_CLOUD_PROJECT"
+        - "CLOUD_TASKS_QUEUE"
+        - "CLOUD_TASKS_LOCATION"
+        - "TASK_OIDC_SERVICE_ACCOUNT_EMAIL"
+        - "AGENT_TASK_URL_MEETING"
+        - "AGENT_TASK_URL_REPLY"
+        - "AGENT_TASK_URL_ACTIONS"
+        - "AGENT_CALLBACK_TOKEN"
+      optional:
+        - "FIRESTORE_PROJECT_ID"
+        - "GCP_REGION"
+        - "API_BASE_URL"
+        - "APP_ENV"
+    endpoints:
+      public:
+        - method: "GET"
+          path: "/healthz"
+          desc: "Cloud Run health check"
+        - method: "GET"
+          path: "/api/healthz"
+          desc: "health alias"
+        - method: "POST"
+          path: "/api/projects"
+          body_schema: "shared.CreateProjectRequest"
+          response_schema: "shared.CreateProjectResponse"
+        - method: "GET"
+          path: "/api/projects/{projectId}"
+          response: "Project"
+        - method: "POST"
+          path: "/api/projects/{projectId}/meetings"
+          body_schema: "shared.CreateMeetingRequest"
+          response_schema: "shared.CreateMeetingResponse"
+          side_effects:
+            - "Firestore: meetings/{meetingId} status=ANALYZING"
+            - "Cloud Tasks: kind=meeting_structurer enqueue"
+        - method: "GET"
+          path: "/api/projects/{projectId}/meetings/{meetingId}"
+          response: "Meeting"
+        - method: "GET"
+          path: "/api/projects/{projectId}/decisions?status=&limit="
+          response: "{ decisions: Decision[] }"
+        - method: "POST"
+          path: "/api/projects/{projectId}/decisions/create"
+          body_schema: "api.local.CreateDecisionRequest"
+          response: "{ decisionId }"
+        - method: "GET"
+          path: "/api/projects/{projectId}/decisions/{decisionId}"
+          response: "{ decision }"
+        - method: "PATCH"
+          path: "/api/projects/{projectId}/decisions/{decisionId}"
+          body_schema: "shared.PatchDecisionRequest"
+          response_schema: "shared.PatchDecisionResponse"
+          side_effects:
+            - "Decision readiness 再計算"
+        - method: "POST"
+          path: "/api/projects/{projectId}/decisions/{decisionId}/link_meeting"
+          body_schema: "{ meetingId }"
+          response: "{ ok:true }"
+        - method: "POST"
+          path: "/api/projects/{projectId}/decisions/{decisionId}/actions/bulk"
+          body_schema: "shared.BulkCreateActionsRequest"
+          response: "{ created }"
+        - method: "POST"
+          path: "/api/projects/{projectId}/decisions/{decisionId}/chat/thread"
+          body_schema: "shared.CreateThreadRequest"
+          response_schema: "shared.CreateThreadResponse"
+        - method: "POST"
+          path: "/api/chat/threads/{threadId}/messages"
+          body_schema: "shared.PostMessageRequest"
+          response_schema: "shared.PostMessageResponse"
+          notes:
+            - "MVP: format=ANSWER_SET の場合 metadata に projectId/decisionId を同梱してもらう"
+            - "将来: threadId -> thread(decisionId) を引いて解決する"
+          side_effects:
+            - "ANSWER_SETなら Cloud Tasks: kind=reply_integrator enqueue（暫定）"
+        - method: "GET"
+          path: "/api/chat/threads/{threadId}/messages/list?limit="
+          response: "{ messages }"
+        - method: "GET"
+          path: "/api/chat/threads/{threadId}/messages/{messageId}"
+          response: "{ message }"
+        - method: "POST"
+          path: "/api/projects/{projectId}/notifications"
+          body_schema: "shared.CreateNotificationRequest"
+          response_schema: "shared.CreateNotificationResponse"
+        - method: "GET"
+          path: "/api/projects/{projectId}/notifications?limit="
+          response_schema: "shared.ListNotificationsResponse"
+        - method: "POST"
+          path: "/api/projects/{projectId}/decisions/{decisionId}/skills/draft_actions"
+          response: "{ ok:true }"
+          side_effects:
+            - "Cloud Tasks: kind=draft_actions_skill enqueue"
+      internal:
+        - method: "POST"
+          path: "/api/internal/agent/callback"
+          auth: "X-Agent-Token required"
+          body_schema: "api.internal.AgentCallbackUnion"
+          effects:
+            meeting_structurer:
+              - "Decisions upsert（create or update）"
+              - "Meeting status DONE + extracted.decisionIds"
+              - "不足質問があれば thread 作成 & QUESTION_SET message 投稿"
+              - "Notification best-effort"
+            reply_integrator:
+              - "Decision patch 反映（owner/due/criteria/options/assumptions/rationale...）"
+              - "readiness 再計算 & status 自動更新（NEEDS_INFO -> READY_TO_DECIDEの可能性）"
+              - "Notification best-effort"
+            draft_actions_skill:
+              - "draftActions を actions に一括作成"
+              - "Notification best-effort"
+
+  agent:
+    role:
+      - "meeting_structurer: 会議メモ -> Decision候補 + QuestionSet生成"
+      - "reply_integrator: AnswerSet -> Decision patch生成"
+      - "draft_actions_skill: Decision -> Action素案生成"
+    contracts:
+      callback_endpoint: "/api/internal/agent/callback"
+      auth:
+        header: "X-Agent-Token"
+        env: "AGENT_CALLBACK_TOKEN"
+      payload_schemas:
+        - "AgentMeetingStructurerCallback"
+        - "AgentReplyIntegratorCallback"
+        - "AgentDraftActionsCallback"
+    non_goals_mvp:
+      - "エージェント実行の完全な状態管理（run tracking）"
+      - "高度なツール実行（deep research / Opal等）は拡張"
+
+  flows:
+    end_to_end_minimum:
+      meeting_to_decisions:
+        steps:
+          - "ユーザーが会議メモを貼り付け -> POST /projects/{projectId}/meetings"
+          - "APIがMeetingをANALYZINGで保存"
+          - "APIがCloud TasksでAgent(meeting_structurer)を起動"
+          - "Agentが抽出結果を callback にPOST"
+          - "APIがDecision upsert + Meeting DONE + QuestionSet投稿"
+      fill_missing_info:
+        steps:
+          - "ユーザーがQUESTION_SETを見て回答 -> PostMessage(format=ANSWER_SET)"
+          - "APIがCloud TasksでAgent(reply_integrator)起動（暫定: metadataにprojectId/decisionIdが必要）"
+          - "Agentが patch を callback にPOST"
+          - "APIがDecisionに反映し readiness再計算"
+      draft_actions:
+        steps:
+          - "ユーザーが /skills/draft_actions を実行"
+          - "APIがCloud TasksでAgent(draft_actions_skill)起動"
+          - "AgentがdraftActionsを callback"
+          - "APIがActionをbulk作成"
+    agenda_generation:
+      mvp_policy: "MVPではサーバーで自動生成APIを必須にしない（後で追加）"
+      later:
+        - "決裁を READY / NEEDS_INFO / REOPEN にグルーピングし、時間割（timebox）でアジェンダ化"
+
+  readiness_rule_mvp:
+    source: "packages/shared/rules/decision_readiness.ts"
+    core_required_to_be_ready:
+      - "owner"
+      - "dueAt"
+      - "criteria"
+      - "options (>=2)"
+    scoring:
+      threshold_default: 80
+      note: "rationaleは準必須（欠けてもスコア減点）"
+    auto_status_transition:
+      allowed: ["NEEDS_INFO -> READY_TO_DECIDE"]
+      forbidden: ["DECIDED/ARCHIVEDを自動で動かさない", "REOPENを自動で戻さない"]
+
+  security_mvp:
+    public_api:
+      auth: "MVPでは未導入（要注意）。後でFirebase Auth等へ拡張"
+      risk_note: "インターネット公開するなら最優先で認証/レート制限が必要"
+    internal_callback:
+      required: true
+      method: "X-Agent-Token (shared secret)"
+      fail_closed: true
+      note: "Cloud Run同士のIAM認証に寄せる案もある（将来）"
+    data_handling:
+      pii_policy: "会議メモに個人情報が入り得る。MVPでも保管範囲と運用ルールは明記する"
+
+  idempotency_and_consistency:
+    known_approach_mvp:
+      api_to_agent:
+        - "Cloud Tasks enqueueは重複し得る"
+        - "Agent側は idempotencyKey を受け取り、同じ結果を再送してもAPIが破綻しない設計に寄せる"
+      agent_to_api:
+        - "callbackはリトライされ得る"
+        - "API側は upsert（同じdecisionIdは上書き）で耐える"
+    gaps_and_actions:
+      - id: "IDEMP-001"
+        issue: "agent_runs の本格運用が未実装。重複callbackの検知が弱い"
+        mvp_resolution: "upsertで許容。致命でなければ後回し"
+        extension: "agent_runsに idempotencyKey で突合し、二重適用を明示的にスキップ"
+      - id: "CONS-001"
+        issue: "meeting_structurerが decisionId を返さない場合、questionSetのdecision参照が曖昧"
+        mvp_resolution: "questionSets.decisionRef.decisionId を推奨必須化（仕様上）"
+        extension: "titleマッチ/embedding類似で解決、またはagent側で必ずdecisionIdを採番"
+
+  inconsistencies_and_concerns:
+    - id: "API-001"
+      category: "Data model"
+      concern: "CreateDecisionRequestがsharedに無く、api内のローカルschemaになっている"
+      impact: "フロントとの整合が取りにくい"
+      mvp_fix: "mvpでは許容（短期）"
+      recommended_fix: "shared/dto/decisions.ts に CreateDecisionRequest/Response を追加して統一"
+    - id: "API-002"
+      category: "Routing"
+      concern: "decisions create が /decisions/create になっている（REST的には /decisions POST が自然）"
+      impact: "API設計の一貫性"
+      mvp_fix: "現状維持でもOK（時間優先）"
+      recommended_fix: "POST /projects/{projectId}/decisions に寄せる"
+    - id: "CHAT-001"
+      category: "Agent trigger"
+      concern: "ANSWER_SET投稿時に metadata.projectId/decisionId を要求する暫定仕様"
+      impact: "クライアント実装が気持ち悪い"
+      mvp_fix: "MVPでは許容（最短）"
+      recommended_fix: "threads/{threadId} から decisionId/projectId を解決し、metadata不要化"
+    - id: "TASK-001"
+      category: "Async"
+      concern: "Cloud Tasks URL + OIDC設定が環境に依存し、構築漏れが起きやすい"
+      impact: "デモで詰む"
+      mvp_fix: "mvp.yaml に env と手順を明記（この仕様書に含める）"
+      recommended_fix: "Terraform/infraで一括構築、Secret Managerに寄せる"
+    - id: "SEC-001"
+      category: "Security"
+      concern: "public APIに認証がない"
+      impact: "本番公開不可"
+      mvp_fix: "ハッカソン用途なら限定公開/Basic auth/Cloud Armor等で暫定対処"
+      recommended_fix: "Firebase Auth / IAP / IAM認証へ"
+    - id: "DATA-001"
+      category: "Storage"
+      concern: "meeting.raw.textをFirestoreに直保存（長文制限/コスト/個情）"
+      impact: "サイズ上限・費用・運用リスク"
+      mvp_fix: "短文前提で許容。長い場合は切り詰め or GCSに逃がす設計を文書化"
+      extension: "raw.storage=GCS を正式運用し、gcsUriに保存"
+    - id: "MERGE-001"
+      category: "Product behavior"
+      concern: "Decision merge policyはあるが、実際のマージフロー/画面が未定"
+      impact: "重複決裁が増える"
+      mvp_fix: "マージは手動（提示だけ）"
+      extension: "候補提示→承認→統合の履歴を残す"
+    - id: "OBS-001"
+      category: "Observability"
+      concern: "処理失敗時の追跡が通知依存で弱い"
+      impact: "デバッグ困難"
+      mvp_fix: "callback FAILEDでNotificationだけでも出す"
+      extension: "agent_runsを本運用 + Error Reporting + trace"
+
+  extension_points_must_leave_open:
+    input_connectors:
+      mvp: "会議メモは貼り付けのみ"
+      keep_open:
+        - "Notion API取り込み"
+        - "tldv API取り込み"
+        - "Webhook / API Trigger"
+      design_note: "Meeting.source.type と connectorId を先に用意している（拡張に有利）"
+    output_channels:
+      mvp: "アプリ内通知・アプリ内チャット"
+      keep_open:
+        - "Slack/Teams/Email"
+        - "Webhook"
+      design_note: "Thread.channel を enum で用意済み"
+    agent_skills:
+      mvp: "meeting_structurer / reply_integrator / draft_actions_skill"
+      keep_open:
+        - "deep research（外部一般情報の補完）"
+        - "選択肢の素案生成（Option Drafting）"
+        - "リスク洗い出し（Reopen triggers提案）"
+    infra:
+      mvp: "手動でGCP設定でも成立"
+      keep_open:
+        - "Terraformで一括（Cloud Run/Firestore/Tasks/SA/Domain）"
+        - "Secret Manager化"
+        - "環境分離（dev/stg/prod）"
+
+  mvp_test_policy:
+    question: "API側で『Agent起動 → callback』の1本線テストはマストか？"
+    decision: "マストではない。mvp.yaml では『推奨（強い）』として扱う"
+    reasoning:
+      - "ハッカソン審査では『実動デモ』が強いが、時間/構築リスクも高い"
+      - "MVPとしては『callbackを手動curlで叩いて反映確認』でも価値が出る"
+    required_minimum_tests:
+      - "POST /projects -> projectId生成"
+      - "POST /meetings -> meeting作成 & status=ANALYZING"
+      - "POST /internal/agent/callback(meeting_structurer) をcurlで叩き、Decision作成・Meeting DONEを確認"
+      - "QUESTION_SET -> ANSWER_SET までUIで通すなら、reply_integratorは手動callbackでも可"
+    recommended_tests_if_time:
+      - "Cloud Tasks経由でAgentを実際に起動し、callbackまで自動で通すE2E"
+    test_artifacts_to_include:
+      - "sample_payloads（meeting_structurer / reply_integrator / draft_actions_skill）"
+      - "curlコマンド集（token header付き）"
+      - "Firestore確認ポイント（どのdocがどう更新されるか）"
+
+  open_questions_to_resolve_soon:
+    - id: "Q-001"
+      question: "決裁の『確定』(DECIDED) を誰がどう操作する？（UI/権限/ログ）"
+      mvp_answer: "手動ボタンでstatus更新（監査ログは後回し）"
+    - id: "Q-002"
+      question: "DecisionOptionのid付与ルールは？（opt_1固定で良い？）"
+      mvp_answer: "MVPは opt_1..n の再生成でOK（安定IDは後で）"
+    - id: "Q-003"
+      question: "meeting_structurerが生成したdecisionの重複判定は？"
+      mvp_answer: "MVPは重複を許容し、後でmerge候補提示を入れる"
+    - id: "Q-004"
+      question: "会議メモの個情/秘匿の取り扱い（保存期間、アクセス）"
+      mvp_answer: "MVPは短期間・限定共有・デモデータで運用。仕様に注記"
+
+  deliverables_for_hackathon_entry:
+    must_have:
+      - "mvp.yaml（この仕様書）"
+      - "アーキテクチャ図（Cloud Run + Firestore + Tasks + Agent + Callback）"
+      - "デモシナリオ（会議→決裁抽出→質問→反映→決められる）"
+    nice_to_have:
+      - "E2Eテスト（Tasks→Agent→Callback）"
+      - "セキュリティ方針（MVPはtoken、将来はIAM/Firebase Auth）"
+      - "拡張ロードマップ（Notion/tldv/Slack/CRM連携）"

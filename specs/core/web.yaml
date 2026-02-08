@@ -1,0 +1,532 @@
+meta:
+  product_name: "キメボード"
+  target_device: "Desktop Web (primary)"
+  baseline_viewport:
+    width: 1440
+    height: 900
+  layout_system:
+    grid_columns: 12
+    gutter: 24
+    page_margin: 24
+    max_content_width: 1200
+    header_height: 64
+    sidebar_width: 280
+    right_panel_width: 360
+  ux_principles:
+    - "Project軸が常に見える（パンくず/サイドバー）"
+    - "Meeting（束）とDecision（独立）を別軸で扱う"
+    - "AIは会話で完結させず、必ず構造化カードに落とす"
+    - "状態遷移（NEEDS_INFO→READY_TO_DECIDE→DECIDED）を視覚で体感"
+  design_language:
+    style: "Modern B2B SaaS / Bento grid / Minimal containers"
+    component_basis: "shadcn/ui + Tailwind (suggested)"
+    guideline_reference: "Material Design 3 (hierarchy + motion)"
+  theme:
+    color:
+      mode: "light"
+      background: "neutral-50"
+      surface: "white"
+      border: "neutral-200"
+      text_primary: "neutral-900"
+      text_secondary: "neutral-600"
+      accent: "blue-600"
+      accent_soft: "blue-50"
+      danger: "red-600"
+      warning: "amber-600"
+      success: "green-600"
+    typography:
+      font_family: "Inter + Noto Sans JP"
+      base_size: 14
+      scale:
+        h1: 24
+        h2: 18
+        h3: 16
+        body: 14
+        caption: 12
+      weight:
+        normal: 400
+        medium: 500
+        semibold: 600
+    radius:
+      card: 12
+      input: 10
+      button: 10
+      pill: 999
+    elevation:
+      card_shadow: "none_or_low (prefer border-based separation)"
+    spacing:
+      xs: 8
+      sm: 12
+      md: 16
+      lg: 24
+      xl: 32
+  motion:
+    durations_ms:
+      fast: 120
+      normal: 180
+      slow: 240
+    easing: "standard (material-like)"
+    patterns:
+      - name: "state_chip_morph"
+        description: "状態チップが色とラベルを短いフェード/スライドで切替"
+      - name: "card_skeleton"
+        description: "解析中はカード骨組みスケルトンを表示"
+      - name: "right_panel_slide"
+        description: "右パネルは右から180msでスライドイン"
+      - name: "toast_confirm"
+        description: "保存/更新/質問送信は右下トーストで即時フィードバック"
+  accessibility:
+    - "コントラスト比を確保（accentは文字で使いすぎない）"
+    - "キーボード操作: sidebar->main->right_panel順にフォーカス"
+    - "状態は色だけで表現せずラベル/アイコン併用"
+    - "表は行高32以上、クリック領域44px相当"
+
+navigation_shell:
+  persistent_regions:
+    header:
+      height: 64
+      left:
+        - component: "ProductLogo"
+        - component: "ProjectSwitcher"
+      center:
+        - component: "GlobalSearch"
+          placeholder: "決裁・会議・アクションを検索"
+          width_ratio_of_header: 0.45
+      right:
+        - component: "QuickCreate"
+          items: ["新規会議メモ", "新規決裁", "新規アクション"]
+        - component: "NotificationsBell"
+        - component: "UserMenu"
+    sidebar:
+      width: 280
+      sections:
+        - title: "プロジェクト"
+          items:
+            - { label: "ダッシュボード", icon: "layout-dashboard", route: "/p/:projectId" }
+            - { label: "決裁バックログ", icon: "kanban", route: "/p/:projectId/decisions" }
+            - { label: "会議", icon: "calendar", route: "/p/:projectId/meetings" }
+            - { label: "アジェンダ", icon: "list-checks", route: "/p/:projectId/agendas" }
+            - { label: "管理職ビュー", icon: "shield-alert", route: "/p/:projectId/exec" }
+        - title: "設定"
+          items:
+            - { label: "ロール/メンバー", icon: "users", route: "/p/:projectId/settings/members" }
+  right_panel:
+    width: 360
+    default_state: "collapsed"
+    tabs: ["チャット", "エージェントログ"]
+    behavior:
+      open_on:
+        - "DecisionのNEEDS_INFOをクリック"
+        - "『質問を見る』をクリック"
+      close_on: ["Esc", "CloseButton"]
+
+screens:
+  - id: "S1"
+    name: "プロジェクト一覧"
+    route: "/projects"
+    primary_goal: "PJ単位での状況把握と入口提供"
+    layout:
+      uses_shell: false
+      header_height: 64
+      content_max_width: 1200
+      sections:
+        - name: "TopBar"
+          height: 64
+          grid: "12col"
+          elements:
+            - { component: "ProductLogo", col: "1-3" }
+            - { component: "SearchProjects", col: "4-9", height: 40 }
+            - { component: "NewProjectButton", col: "10-12", height: 40 }
+        - name: "ProjectCards"
+          grid: "12col"
+          card_grid:
+            columns: 3
+            gap: 24
+            card_min_height: 160
+          card_contents:
+            - "PJ名 + 短い説明"
+            - "未決決裁数"
+            - "READY_TO_DECIDE数"
+            - "期限超過アクション数"
+            - "次回会議日（任意）"
+    interactions:
+      - "カードクリックでS2へ"
+      - "NewProjectButton: モーダルで作成→即カード追加（toast_confirm）"
+    visual_notes:
+      - "カードはbento風。数値は大きく、ラベルは小さく。"
+
+  - id: "S2"
+    name: "プロジェクトホーム（ダッシュボード）"
+    route: "/p/:projectId"
+    primary_goal: "管理職が『止まり』を一撃で把握"
+    layout:
+      uses_shell: true
+      main:
+        grid: "12col"
+        row_gap: 24
+        sections:
+          - name: "KPI_Bento"
+            col_span: "1-12"
+            bento:
+              columns: 4
+              gap: 24
+              cards:
+                - { title: "未決決裁", value: "24", hint: "全Decisionの未確定", accent: "neutral" }
+                - { title: "決められる", value: "7", hint: "READY_TO_DECIDE", accent: "blue" }
+                - { title: "期限超過", value: "3", hint: "Action overdue", accent: "red" }
+                - { title: "決裁者未設定", value: "5", hint: "今回テーマC", accent: "amber" }
+          - name: "Primary_CTA"
+            col_span: "1-12"
+            card:
+              height: 120
+              layout: "left_text_right_button"
+              left:
+                title: "会議メモを貼り付けて解析"
+                description: "議事録を決裁に変換し、不足を質問します"
+              right:
+                component: "CTAButton"
+                label: "会議メモを追加"
+                route: "/p/:projectId/meetings/new"
+          - name: "Backlog_Snapshot"
+            col_span: "1-7"
+            card:
+              title: "決裁バックログ（上位）"
+              table:
+                columns: ["状態", "決裁", "決裁者", "期限"]
+                row_height: 40
+                rows: 5
+                interactions: ["行クリックでS5へ", "状態チップクリックでフィルタ"]
+          - name: "Agenda_Snapshot"
+            col_span: "8-12"
+            card:
+              title: "次の会議で決める候補"
+              list:
+                items: 3
+                item_height: 52
+                each_item:
+                  - "タイムボックス"
+                  - "READY/NEEDS_INFOラベル"
+                  - "ワンクリックでS8へ"
+    motion:
+      on_load: ["card_skeleton -> content_fade_in (180ms)"]
+    right_panel_behavior:
+      default: "collapsed"
+
+  - id: "S3"
+    name: "会議作成（メモ貼り付け）"
+    route: "/p/:projectId/meetings/new"
+    primary_goal: "MVP入力の最短導線"
+    layout:
+      uses_shell: true
+      main:
+        grid: "12col"
+        sections:
+          - name: "Form"
+            col_span: "1-8"
+            card:
+              title: "会議メモを貼り付け"
+              fields:
+                - { label: "会議名", type: "text", height: 40, placeholder: "例: PJ定例 2/8" }
+                - { label: "日時", type: "datetime", height: 40, optional: true }
+                - { label: "参加者", type: "chips_input", height: 40, optional: true }
+                - { label: "メモ本文", type: "textarea", min_height: 360, placeholder: "議事録/メモを貼り付け" }
+              actions:
+                - { type: "secondary", label: "下書き保存", behavior: "save_only" }
+                - { type: "primary", label: "保存して解析開始", behavior: "save_and_enqueue_agent" }
+          - name: "RightHelp"
+            col_span: "9-12"
+            card:
+              title: "入力のコツ"
+              bullets:
+                - "決めたいこと（論点）が書かれていると精度UP"
+                - "選択肢や懸念点があるとDecision抽出が安定"
+                - "未確定でもOK（不足は質問で埋める）"
+    motion:
+      on_submit_primary:
+        - "button -> loading"
+        - "toast_confirm: '解析を開始しました'"
+        - "redirect to S4 with 'ANALYZING' state"
+
+  - id: "S4"
+    name: "会議詳細（解析結果）"
+    route: "/p/:projectId/meetings/:meetingId"
+    primary_goal: "会議＝決裁の束を可視化し、決裁詳細へ誘導"
+    layout:
+      uses_shell: true
+      main:
+        grid: "12col"
+        sections:
+          - name: "MeetingHeader"
+            col_span: "1-12"
+            card:
+              height: 96
+              left:
+                - "会議名"
+                - "日時・参加者（任意）"
+              right:
+                - { component: "StatusPill", states: ["ANALYZING","DONE","FAILED"], current: "ANALYZING" }
+                - { component: "ReRunAgentButton", visible_when: "FAILED" }
+          - name: "DecisionsFromMeeting"
+            col_span: "1-8"
+            card:
+              title: "抽出された決裁"
+              list:
+                item_height: 88
+                items: 6
+                each_item_layout:
+                  left:
+                    - "決裁タイトル（1行）"
+                    - "短い要約（1行）"
+                  right:
+                    - "状態チップ（NEEDS_INFO/READY/DECIDED）"
+                    - "決裁者（未設定は赤ラベル）"
+                    - "『詳細』ボタン -> S5"
+                interactions:
+                  - "NEEDS_INFO item click -> open right panel (チャット) with auto-scroll"
+          - name: "AgentLogCard"
+            col_span: "9-12"
+            card:
+              title: "エージェントログ"
+              style: "subtle_glass_optional"
+              log_lines:
+                - "[t+0.3s] Decision候補: 3件抽出"
+                - "[t+0.8s] 既存Decisionへのマージ候補: 1件"
+                - "[t+1.2s] 不足質問: 2件生成"
+              footer:
+                - { component: "ViewLogs", behavior: "open right panel tab=エージェントログ" }
+    motion:
+      analyzing_state:
+        - "card_skeleton on DecisionsFromMeeting"
+        - "StatusPill pulse (subtle)"
+      done_state:
+        - "skeleton -> fade_in (180ms)"
+      failed_state:
+        - "inline_error_banner + retry button"
+    right_panel_behavior:
+      open_on: ["click NEEDS_INFO decision", "ViewLogs"]
+
+  - id: "S5"
+    name: "決裁詳細（構造化ビュー）"
+    route: "/p/:projectId/decisions/:decisionId"
+    primary_goal: "キメボードの中核『構造化』を一画面で理解させる"
+    layout:
+      uses_shell: true
+      main:
+        grid: "12col"
+        sections:
+          - name: "DecisionHeader"
+            col_span: "1-12"
+            card:
+              height: 96
+              left:
+                - "決裁タイトル"
+                - "タグ（予算/仕様/体制/Go-NoGoなど）"
+              right:
+                - { component: "StateChip", states: ["NEEDS_INFO","READY_TO_DECIDE","DECIDED","REOPEN"], current: "NEEDS_INFO" }
+                - { component: "OwnerPicker", width: 220, highlight_if_empty: true }
+                - { component: "DueDatePicker", width: 180 }
+                - { component: "DecideButton", label: "確定", enabled_when: "READY_TO_DECIDE" }
+          - name: "MainStructured"
+            col_span: "1-8"
+            stack_gap: 16
+            cards:
+              - title: "選択肢（Options）"
+                content: "Optionカードx3（＋追加）"
+                interactions: ["Option選択は『推奨』表示のみ。確定は人間。"]
+              - title: "根拠（賛成/反対/条件）"
+                content: "Pros/Cons/Conditions 3カラム"
+              - title: "前提（Assumptions）"
+                content: "箇条書き + 'メモから引用'（任意）"
+              - title: "反証条件（Reopen Trigger）"
+                content: "条件 + 発生時の扱い"
+          - name: "Actions"
+            col_span: "9-12"
+            card:
+              title: "アクション"
+              tabs:
+                - name: "Prep（決裁前）"
+                  list_item_height: 44
+                  items: 4
+                  each_item: ["担当", "期限", "状態"]
+                - name: "Exec（決裁後）"
+                  list_item_height: 44
+                  items: 3
+              footer:
+                - { component: "GenerateDraftActions", label: "素案生成（Skill）", behavior: "agent_draft_actions" }
+    right_panel_behavior:
+      open_on: ["StateChip=NEEDS_INFO", "GenerateDraftActions"]
+    motion:
+      on_state_change:
+        - "state_chip_morph"
+        - "toast_confirm: '状態を更新しました'"
+
+  - id: "S6"
+    name: "アプリ内チャット（不足質問Q&A）"
+    route: "/p/:projectId/chat?decisionId=:decisionId"
+    primary_goal: "エージェントの価値『不足を埋める』を体験"
+    layout:
+      uses_shell: true
+      main:
+        grid: "12col"
+        sections:
+          - name: "ChatContainer"
+            col_span: "1-8"
+            card:
+              title: "エージェントチャット"
+              height: 680
+              messages:
+                - from: "agent"
+                  type: "question_set"
+                  max_questions: 3
+                  questions:
+                    - { q: "この決裁の最終決裁者は誰ですか？", ui: "single_select", options: ["本部長", "部長", "PM", "未定"] }
+                    - { q: "判断基準は？（優先）", ui: "multi_select", options: ["納期", "コスト", "品質", "リスク", "顧客影響"] }
+                    - { q: "決める期限は？", ui: "date", preset: "今週金曜" }
+                - from: "user"
+                  type: "answers"
+                  behavior: "submits -> triggers agent integrate"
+              composer:
+                placeholder: "補足や前提があれば入力"
+                actions: ["送信", "テンプレ挿入"]
+          - name: "SidePreview"
+            col_span: "9-12"
+            card:
+              title: "決裁プレビュー"
+              content:
+                - "Owner/Due/Criteriaの埋まり具合メーター（0-100%）"
+                - "READY_TO_DECIDEになる条件一覧（チェック）"
+              interactions:
+                - "回答送信後、チェックが増えるアニメ"
+    motion:
+      on_answer_submit:
+        - "message_send (120ms)"
+        - "agent_typing_indicator (max 2s, fake ok)"
+        - "preview_meter animates to new percent"
+        - "if ready: toast_confirm 'READY_TO_DECIDE になりました'"
+
+  - id: "S7"
+    name: "決裁バックログ（カンバン/リスト）"
+    route: "/p/:projectId/decisions"
+    primary_goal: "Project軸でDecisionが積み上がる体験"
+    layout:
+      uses_shell: true
+      main:
+        grid: "12col"
+        sections:
+          - name: "Toolbar"
+            col_span: "1-12"
+            height: 56
+            elements:
+              - { component: "ViewToggle", options: ["カンバン","リスト"], default: "カンバン" }
+              - { component: "FilterChips", filters: ["決裁者","期限","タグ","状態"] }
+              - { component: "Sort", options: ["今週決める","期限順","更新順"] }
+          - name: "Kanban"
+            col_span: "1-12"
+            kanban:
+              columns:
+                - { key: "NEEDS_INFO", title: "情報不足", width_ratio: 0.25 }
+                - { key: "READY_TO_DECIDE", title: "決められる", width_ratio: 0.25 }
+                - { key: "DECIDED", title: "確定", width_ratio: 0.25 }
+                - { key: "REOPEN", title: "再審", width_ratio: 0.25 }
+              card_min_height: 96
+              interactions:
+                - "カードクリックでS5"
+                - "NEEDS_INFOカードは右パネルのチャットを開く導線"
+    motion:
+      drag_drop:
+        enabled: false
+        note: "ハリボテは見た目だけでOK（実装は後）"
+
+  - id: "S8"
+    name: "会議アジェンダ生成（Agenda Builder）"
+    route: "/p/:projectId/agendas/new"
+    primary_goal: "会議を『決め切る』装置にする"
+    layout:
+      uses_shell: true
+      main:
+        grid: "12col"
+        sections:
+          - name: "AgendaHeader"
+            col_span: "1-12"
+            card:
+              height: 88
+              left:
+                - "アジェンダ名（例: 次回定例）"
+                - "対象期間（今週/来週）"
+              right:
+                - { component: "GenerateAgendaButton", label: "自動生成", behavior: "uses backlog statuses" }
+                - { component: "SaveAgendaButton", label: "保存" }
+          - name: "AgendaColumns"
+            col_span: "1-12"
+            three_columns:
+              gap: 24
+              columns:
+                - title: "決める（Ready）"
+                  width_ratio: 0.38
+                  items: 5
+                  item_fields: ["決裁名","タイムボックス","決裁者"]
+                - title: "材料を揃える（Needs Info）"
+                  width_ratio: 0.32
+                  items: 4
+                  item_fields: ["不足項目","担当","期限"]
+                - title: "再審（Reopen）"
+                  width_ratio: 0.30
+                  items: 2
+                  item_fields: ["前提崩れ","再検討観点"]
+          - name: "OutputPreview"
+            col_span: "1-12"
+            card:
+              title: "出力プレビュー"
+              content: "会議の進行順序（番号付き）+ 目的（決める/揃える/再審）"
+    motion:
+      on_generate:
+        - "card_skeleton 180ms"
+        - "items fade_in with stagger 60ms"
+        - "toast_confirm 'アジェンダ案を生成しました'"
+
+  - id: "S9"
+    name: "管理職ビュー（Exec View）"
+    route: "/p/:projectId/exec"
+    primary_goal: "テーマC『決裁者が曖昧で止まる』を一撃で潰す"
+    layout:
+      uses_shell: true
+      main:
+        grid: "12col"
+        sections:
+          - name: "ExecutiveBento"
+            col_span: "1-12"
+            bento:
+              columns: 3
+              gap: 24
+              cards:
+                - { title: "決裁者未設定（要対応）", value: "5", accent: "amber", action: "一覧へスクロール" }
+                - { title: "期限超過アクション", value: "3", accent: "red", action: "一覧へスクロール" }
+                - { title: "今週決めるべき決裁", value: "7", accent: "blue", action: "S8へ" }
+          - name: "OwnerMissingList"
+            col_span: "1-7"
+            card:
+              title: "決裁者未設定"
+              table:
+                columns: ["決裁", "会議", "不足", "最有力候補"]
+                rows: 8
+                row_cta: "決裁者を指定 -> S5へ"
+          - name: "OverdueActions"
+            col_span: "8-12"
+            card:
+              title: "期限超過アクション"
+              list:
+                items: 6
+                each_item: ["アクション名","紐づく決裁","担当","超過日数"]
+                item_cta: "状況確認（チャット）"
+          - name: "OneClickOps"
+            col_span: "1-12"
+            card:
+              title: "ワンクリック運用（演出でOK）"
+              buttons:
+                - { label: "不足質問を再生成", behavior: "opens right panel, tab=チャット" }
+                - { label: "決裁者候補を提案", behavior: "agent suggests candidates (mock)" }
+                - { label: "今週のアジェンダを作る", route: "/p/:projectId/agendas/new" }
+    motion:
+      on_click_ops:
+        - "right_panel_slide"
+        - "toast_confirm"

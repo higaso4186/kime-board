@@ -1,0 +1,16 @@
+.
+  README.md
+  specs/
+    mvp.yaml
+    spec-impl-map.yaml
+    ai-rules/
+      agent.yaml
+      api.yaml
+      infra.yaml
+      project.yaml
+      web.yaml
+    samples/
+      README.yaml
+      draft_actions_skill_succeeded.json
+      meeting_structurer_succeeded.json
+      reply_integrator_succeeded.json

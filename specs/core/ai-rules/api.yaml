@@ -1,0 +1,23 @@
+ai_rules_api:
+  id: "AI-RULES-API-001"
+  scope: "apps/api"
+  invariants:
+    - "public routes: request body/query params は必ずZod validate"
+    - "internal callback: X-Agent-Token 必須（fail-closed）"
+    - "Decision変更時: computeDecisionReadiness を毎回再計算"
+    - "DECIDED/ARCHIVED は自動遷移しない（MVP）"
+    - "Firestore writeは可能なら merge と非merge を意識（上書き事故回避）"
+  error_policy:
+    - "jsonError は必ず {code,message,details?} 形式"
+    - "VALIDATION_ERROR は 400"
+    - "NOT_FOUND は 404"
+    - "FORBIDDEN は 403"
+    - "INTERNAL は 500（details はログ向け）"
+  idempotency_and_retry:
+    - "Cloud Tasks / callback は重複し得る前提"
+    - "callbackの適用は upsert方針（同じdecisionIdは上書きで耐える）"
+    - "questionSet は decisionRef.decisionId を仕様上『推奨必須』として扱う"
+  keep_open_extensions:
+    - "Meeting.raw.storage = GCS への逃し（長文対応）"
+    - "threadId -> decisionId の解決で metadata依存を除去（CHAT-001解消）"
+    - "認証（Firebase Auth/IAP）"

@@ -1,0 +1,45 @@
+ai_rules_agent:
+  id: "AI-RULES-AGENT-001"
+  scope: "apps/agent"
+  core_policy:
+    - "人間の代わりに最終決裁しない（決裁案・質問・素案だけ）"
+    - "外部送信（Slack/Email/Webhook）はMVPではしない"
+    - "出力は必ずスキーマ準拠（逸脱=失敗）"
+  kinds:
+    meeting_structurer:
+      input:
+        - "meetingId"
+        - "projectId"
+        - "rawText（またはAPIから取得）"
+      output_contract: "POST /api/internal/agent/callback kind=meeting_structurer"
+      must_do:
+        - "決裁候補を抽出（titleは短く具体）"
+        - "選択肢（>=2）を可能なら作る。難しければ 'NEEDS_INFO' 前提で質問へ"
+        - "不足項目（owner/dueAt/criteria/options）を QUESTION_SET として作る"
+      must_not:
+        - "憶測で固有名詞や数値を捏造しない"
+        - "DECIDEDに誘導しない"
+    reply_integrator:
+      input:
+        - "threadId"
+        - "messageId"
+        - "decisionId"
+      output_contract: "callback kind=reply_integrator appliedPatch"
+      must_do:
+        - "ユーザー回答を decision patch に正規化する"
+        - "不明なら patch を出さない（空でも良い）"
+      must_not:
+        - "勝手に options を大幅改変しない（ユーザー回答根拠がない場合）"
+    draft_actions_skill:
+      input:
+        - "decisionId"
+      output_contract: "callback kind=draft_actions_skill draftActions[]"
+      must_do:
+        - "PREP/EXEC を混ぜて 2〜6 件程度の素案"
+        - "曖昧なら assignee は空で良い"
+      must_not:
+        - "期限(dueAt)を根拠なく断定しない"
+  callback_requirements:
+    - "X-Agent-Token を必ず付与"
+    - "status=FAILED の場合は error に理由（短文）"
+    - "idempotencyKey を可能な限り指定（meetingId/messageId/decisionIdなど）"

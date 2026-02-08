@@ -1,0 +1,38 @@
+ai_rules_project:
+  id: "AI-RULES-PROJECT-001"
+  purpose:
+    - "MVPの価値（会議→決裁抽出→不足質問→反映→アクション）から逸脱しない"
+    - "shared(Zod)を単一の真実にして、web/api/agentの不整合を防ぐ"
+    - "後から拡張できるように『手を開ける』箇所を明示し、先に作り込みすぎない"
+  non_goals:
+    - "外部連携(Notion/tldv/Slack/Email)の本実装をMVPに入れない"
+    - "リアルタイム文字起こしを入れない"
+    - "本番級セキュリティ(SSO/IAP/監査ログ完全)をMVP必須にしない"
+  source_of_truth:
+    domain_and_dto: "packages/shared"
+    api_contract: "packages/shared/src/dto/*"
+    internal_agent_callback_contract: "apps/api/app/api/internal/agent/callback/_schemas.ts (MVP)"
+    spec: "specs/mvp.yaml"
+  invariants_mvp:
+    - "Decision readiness（completeness）計算は shared のルールを唯一の判定とする"
+    - "APIはZodで必ず入力検証する（例外: internal callbackは専用schema）"
+    - "Agent→APIコールバックはX-Agent-Tokenでfail-closed"
+    - "MVPは『人間承認前提』：自動でDECIDEDにしない"
+  change_policy:
+    - rule: "sharedの型/DTOを変更したら、web/api/agentの参照箇所も同時に更新する"
+      required_artifacts:
+        - "before/after diff（変更点）"
+        - "影響範囲メモ（破壊的変更か）"
+    - rule: "新規エンドポイント追加はDTOをsharedに追加してから"
+    - rule: "MVP範囲外の機能は TODO/feature flag で明示"
+  naming_conventions:
+    project: ["projectId=prj_*"]
+    meeting: ["meetingId=mtg_*"]
+    decision: ["decisionId=dcs_*"]
+    action: ["actionId=act_*"]
+    chat: ["threadId=thr_*", "messageId=msg_*"]
+  definition_of_done_mvp:
+    - "会議メモ貼り付け -> Decision候補がFirestoreに作成され一覧で見える"
+    - "不足質問(QUESTION_SET)がチャットに出る"
+    - "回答(ANSWER_SET)でDecisionが更新され、completenessが上がる"
+    - "アクション素案の作成ができる（skill）"

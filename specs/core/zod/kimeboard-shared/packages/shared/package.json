@@ -1,0 +1,52 @@
+{
+  "name": "@kimeboard/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./constants/*": {
+      "types": "./dist/constants/*.d.ts",
+      "default": "./dist/constants/*.js"
+    },
+    "./domain/*": {
+      "types": "./dist/domain/*.d.ts",
+      "default": "./dist/domain/*.js"
+    },
+    "./dto/*": {
+      "types": "./dist/dto/*.d.ts",
+      "default": "./dist/dto/*.js"
+    },
+    "./rules/*": {
+      "types": "./dist/rules/*.d.ts",
+      "default": "./dist/rules/*.js"
+    },
+    "./utils/*": {
+      "types": "./dist/utils/*.d.ts",
+      "default": "./dist/utils/*.js"
+    },
+    "./i18n/*": {
+      "types": "./dist/i18n/*.d.ts",
+      "default": "./dist/i18n/*.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.2",
+    "typescript": "^5.6.3"
+  }
+}

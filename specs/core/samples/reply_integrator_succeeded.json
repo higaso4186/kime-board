@@ -1,0 +1,15 @@
+{
+  "projectId": "prj_xxx",
+  "kind": "reply_integrator",
+  "status": "SUCCEEDED",
+  "decisionId": "dcs_xxx",
+  "threadId": "thr_xxx",
+  "appliedPatch": {
+    "dueAt": "2026-02-20T00:00:00.000Z",
+    "criteria": [
+      "月次コスト",
+      "遅延率",
+      "返品率"
+    ]
+  }
+}

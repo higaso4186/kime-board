@@ -1,0 +1,640 @@
+agent_app_spec:
+  app_name: "kimeboard-agent"
+  location: "apps/agent"
+  primary_responsibility: "ProjectのDecision Backlogを育てる（会議メモ→決裁化→不足質問→回答統合）"
+  runtime:
+    language: "Python 3.11+ (recommended for ADK ecosystem)"
+    framework:
+      agent: "Google Agent Development Kit (ADK)"
+      http: "FastAPI (for Cloud Run endpoints) or Flask"
+    deployment:
+      target: "Cloud Run"
+      ingress: "internal or authenticated"
+      auth:
+        - "Cloud Run service account"
+        - "API 호출はOIDC ID token or service-to-service auth"
+  dependencies:
+    python_packages:
+      - "google-adk (ADK core)"
+      - "google-cloud-aiplatform (optional; can use REST)"
+      - "httpx (HTTP client)"
+      - "pydantic (schemas)"
+      - "tenacity (retry)"
+      - "structlog (structured logs)"
+  environment_variables:
+    required:
+      API_BASE_URL: "https://<api-service-url>"
+      API_AUDIENCE: "https://<api-service-url> (for OIDC token)"
+      GCP_PROJECT_ID: "string"
+      GCP_REGION: "string"
+      VERTEX_MODEL: "gemini-2.5-flash (default)"
+      TASK_AUTH_MODE: "OIDC|NONE (recommended OIDC)"
+    optional:
+      MAX_CONTEXT_DECISIONS: 10
+      MAX_OUTPUT_TOKENS_STRUCTURER: 2048
+      MAX_OUTPUT_TOKENS_QUESTIONER: 1024
+      MAX_OUTPUT_TOKENS_ACTIONS: 1024
+      TEMPERATURE_STRUCTURER: 0.2
+      TEMPERATURE_QUESTIONER: 0.2
+      TEMPERATURE_ACTIONS: 0.4
+      LOG_LEVEL: "INFO"
+      SAFE_MODE: "true (refuse auto-merge)"
+
+  directory_structure:
+    apps/agent:
+      - "README.md"
+      - "pyproject.toml (or requirements.txt)"
+      - "Dockerfile"
+      - "src/"
+      - "src/main.py"
+      - "src/server.py"
+      - "src/config.py"
+      - "src/auth/"
+      - "src/auth/oidc.py"
+      - "src/api_client/"
+      - "src/api_client/client.py"
+      - "src/api_client/endpoints.py"
+      - "src/models/"
+      - "src/models/schemas.py"
+      - "src/tools/"
+      - "src/tools/kimeboard_api_tools.py"
+      - "src/agents/"
+      - "src/agents/root_agent.py"
+      - "src/agents/workflows/"
+      - "src/agents/workflows/meeting_structurer.py"
+      - "src/agents/workflows/gap_questioner.py"
+      - "src/agents/workflows/reply_integrator.py"
+      - "src/agents/workflows/draft_actions_skill.py"
+      - "src/prompts/"
+      - "src/prompts/system.md"
+      - "src/prompts/meeting_structurer.md"
+      - "src/prompts/gap_questioner.md"
+      - "src/prompts/reply_integrator.md"
+      - "src/prompts/draft_actions.md"
+      - "src/observability/"
+      - "src/observability/logger.py"
+      - "src/observability/runlog.py"
+      - "src/utils/"
+      - "src/utils/idempotency.py"
+      - "src/utils/text.py"
+      - "src/utils/limits.py"
+      - "tests/"
+      - "tests/test_schemas.py"
+      - "tests/test_idempotency.py"
+
+  # ============================================================
+  # Cloud Run HTTP Interface (Tasks entrypoints)
+  # ============================================================
+  http_interface:
+    server:
+      framework: "FastAPI recommended"
+      endpoints:
+        - method: "POST"
+          path: "/tasks/meeting_structurer"
+          auth: "Cloud Tasks OIDC"
+          body_schema:
+            projectId: "string"
+            meetingId: "string"
+            idempotencyKey?: "string"
+          behavior:
+            - "validate payload"
+            - "start AgentRun log"
+            - "invoke workflow: meeting_structurer"
+            - "write AgentRun status"
+          returns: { ok: true, runId: "string" }
+
+        - method: "POST"
+          path: "/tasks/reply_integrator"
+          auth: "Cloud Tasks OIDC"
+          body_schema:
+            projectId: "string"
+            decisionId: "string"
+            threadId: "string"
+            messageId: "string"
+            idempotencyKey?: "string (default=messageId)"
+          behavior:
+            - "invoke workflow: reply_integrator"
+          returns: { ok: true, runId: "string" }
+
+        - method: "POST"
+          path: "/tasks/draft_actions_skill"
+          auth: "Cloud Tasks OIDC"
+          body_schema:
+            projectId: "string"
+            decisionId: "string"
+            idempotencyKey?: "string"
+          behavior:
+            - "invoke workflow: draft_actions_skill"
+          returns: { ok: true, runId: "string" }
+
+        - method: "GET"
+          path: "/healthz"
+          returns: { ok: true }
+
+  # ============================================================
+  # ADK Agent Composition
+  # ============================================================
+  adk_agent:
+    root_agent:
+      name: "KimeboardRootAgent"
+      type: "Workflow Agent (or custom orchestrator)"
+      memory_strategy:
+        principle: "Keep ADK memory light; use API as source of truth"
+        stored:
+          - "recent_run_summary (short)"
+          - "last_decision_ids_in_context (<=10)"
+      tools:
+        - "KimeboardApiToolset (HTTP)"
+        - "TextUtilsTool (truncate/normalize)"
+      child_workflows:
+        - "MeetingStructurerWorkflow"
+        - "GapQuestionerWorkflow"
+        - "ReplyIntegratorWorkflow"
+        - "DraftActionsSkillWorkflow"
+
+  # ============================================================
+  # Toolset (Agent uses API only; no DB direct)
+  # ============================================================
+  tools:
+    kimeboard_api_tools:
+      base_url: "${API_BASE_URL}"
+      auth: "OIDC ID token with audience=${API_AUDIENCE}"
+      timeout_seconds: 30
+      retry:
+        policy: "exponential_backoff"
+        max_attempts: 3
+        retry_on: ["5xx", "429", "timeout"]
+      methods:
+        - name: "get_meeting"
+          http:
+            method: "GET"
+            path_template: "/api/projects/{projectId}/meetings/{meetingId}"
+          returns: { meeting: "Meeting", extractedDecisionIds: "string[]" }
+
+        - name: "get_decision"
+          http:
+            method: "GET"
+            path_template: "/api/projects/{projectId}/decisions/{decisionId}"
+          returns: { decision: "Decision", actions: "Action[]", threadId?: "string" }
+
+        - name: "list_candidate_decisions"
+          http:
+            method: "GET"
+            path_template: "/api/projects/{projectId}/decisions"
+            query_params:
+              status: "NEEDS_INFO,READY_TO_DECIDE,REOPEN"
+              limit: 10
+              orderBy: "updatedAt_desc"
+          purpose: "Project全件を取らず候補だけ（コスト制御）"
+          returns: { decisions: "DecisionSummary[]" }
+
+        - name: "upsert_decision"
+          http:
+            method: "PATCH"
+            path_template: "/api/projects/{projectId}/decisions/{decisionId}"
+          body_schema: "DecisionPatch"
+          returns: { decision: "Decision" }
+
+        - name: "create_decision"
+          http:
+            method: "POST"
+            path_template: "/api/projects/{projectId}/decisions"
+          body_schema: "DecisionCreate"
+          returns: { decisionId: "string" }
+
+        - name: "link_meeting_to_decision"
+          http:
+            method: "POST"
+            path_template: "/api/projects/{projectId}/decisions/{decisionId}/link_meeting"
+          body_schema: { meetingId: "string" }
+          returns: { ok: true }
+
+        - name: "create_thread_if_needed"
+          http:
+            method: "POST"
+            path_template: "/api/projects/{projectId}/decisions/{decisionId}/chat/thread"
+          body_schema: { channel: "IN_APP" }
+          returns: { threadId: "string" }
+
+        - name: "post_question_set"
+          http:
+            method: "POST"
+            path_template: "/api/chat/threads/{threadId}/messages"
+          body_schema:
+            senderType: "AGENT"
+            format: "QUESTION_SET"
+            content: "string"
+            metadata:
+              questions: "Question[]"
+          returns: { messageId: "string" }
+
+        - name: "post_agent_log"
+          http:
+            method: "POST"
+            path_template: "/api/projects/{projectId}/meetings/{meetingId}/logs"
+          body_schema: { runId: "string", line: "string" }
+          returns: { ok: true }
+
+        - name: "create_actions_bulk"
+          http:
+            method: "POST"
+            path_template: "/api/projects/{projectId}/decisions/{decisionId}/actions/bulk"
+          body_schema:
+            actions: "ActionDraft[]"
+          returns: { created: "number" }
+
+        - name: "notify_in_app"
+          http:
+            method: "POST"
+            path_template: "/api/projects/{projectId}/notifications"
+          body_schema: "NotificationCreate"
+          returns: { notificationId: "string" }
+
+  # ============================================================
+  # Schemas (Pydantic / JSON schema oriented)
+  # ============================================================
+  schemas:
+    Question:
+      fields:
+        qid: "string"
+        type: "single_select|multi_select|date|text"
+        text: "string"
+        options?: "string[]"
+        required?: "boolean"
+        maps_to:
+          decision_field: "owner|dueAt|criteria|options|assumptions|rationale|reopenTriggers"
+    DecisionExtract:
+      fields:
+        title: "string"
+        summary?: "string"
+        tags?: "string[]"
+        options?: "Option[]"
+        criteria?: "string[]"
+        assumptions?: "string[]"
+        reopenTriggers?: "string[]"
+        rationale:
+          pros: "string[]"
+          cons: "string[]"
+          conditions: "string[]"
+        ownerSuggestion?: { displayName: "string?", reason: "string?" }
+        dueSuggestion?: { dueAtIso: "string?", reason: "string?" }
+        mergeCandidate:
+          candidateDecisionId?: "string"
+          score?: "number (0..1)"
+          reason?: "string"
+        missingFields: "string[]"
+        completenessScore: "number (0..100)"
+        evidenceQuotes?:
+          - meetingId: "string"
+            text: "string (<=200 chars)"
+    DecisionPatch:
+      fields:
+        title?: "string"
+        summary?: "string"
+        tags?: "string[]"
+        options?: "Option[]"
+        criteria?: "string[]"
+        assumptions?: "string[]"
+        reopenTriggers?: "string[]"
+        rationale?: "object"
+        owner?: "object"
+        dueAt?: "timestamp"
+        status?: "NEEDS_INFO|READY_TO_DECIDE|DECIDED|REOPEN"
+        completeness?: "object"
+        merge?: "object"
+    ActionDraft:
+      fields:
+        type: "PREP|EXEC"
+        title: "string"
+        description?: "string"
+        assigneeSuggestion?: { displayName: "string?", reason: "string?" }
+        dueSuggestion?: { dueAtIso: "string?", reason: "string?" }
+
+  # ============================================================
+  # Workflows (Core of "Agent-ness")
+  # ============================================================
+  workflows:
+
+    # ----------------------------
+    # 1) Meeting Structurer
+    # ----------------------------
+    MeetingStructurerWorkflow:
+      purpose: "Meeting raw textからDecision候補を抽出し、ProjectのDecision backlogへ追加/更新候補を作る"
+      triggers:
+        - "API: POST meetings -> Cloud Tasks enqueue /tasks/meeting_structurer"
+      inputs:
+        projectId: "string"
+        meetingId: "string"
+        idempotencyKey: "string? (default=meetingId+checksum)"
+      idempotency:
+        check_via_api: "API側でidempotencyKeyの重複runを拒否 or no-op"
+        agent_side_guard:
+          - "同一idempotencyKeyなら処理を中断（APIログ参照）"
+      steps:
+        - step: "fetch_meeting"
+          tool: "get_meeting"
+          output: "meeting.rawText"
+        - step: "fetch_candidate_decisions"
+          tool: "list_candidate_decisions"
+          params:
+            limit: "${MAX_CONTEXT_DECISIONS}"
+          output: "decision_summaries[]"
+        - step: "prepare_prompt_context"
+          logic:
+            - "rawTextを正規化（改行/箇条書き）"
+            - "候補Decisionはタイトル/要約/状態/タグ/決裁者/期限のみ渡す"
+            - "文字数制限（例: rawText 20k charsまで）"
+        - step: "llm_extract_decisions"
+          llm:
+            provider: "Vertex AI Gemini"
+            model: "${VERTEX_MODEL}"
+            temperature: "${TEMPERATURE_STRUCTURER}"
+            max_output_tokens: "${MAX_OUTPUT_TOKENS_STRUCTURER}"
+            prompt_files:
+              system: "prompts/system.md"
+              task: "prompts/meeting_structurer.md"
+            output_format: "JSON strictly"
+            expected_json: "DecisionExtract[]"
+          postprocess:
+            - "JSON schema validation"
+            - "evidenceQuotesは200文字以下にtruncate"
+        - step: "persist_decisions"
+          logic:
+            - "各DecisionExtractについて分岐"
+            - "mergeCandidateがある場合は mergeStatus=CANDIDATE + requiresHumanApproval=true"
+            - "既存更新はPATCH、新規はPOST create_decision"
+            - "meetingIdをdecision.linkedMeetingIdsへ追加（link_meeting_to_decision）"
+            - "Decisionのstatusは missingFieldsがあればNEEDS_INFO、なければREADY_TO_DECIDE"
+        - step: "create_or_get_threads"
+          logic:
+            - "NEEDS_INFOのDecisionだけ threadを用意（In-app）"
+            - "create_thread_if_needed"
+        - step: "generate_questions_for_missing"
+          invoke: "GapQuestionerWorkflow"
+          for_each: "NEEDS_INFO decisions"
+        - step: "write_agent_run_log"
+          tool: "post_agent_log"
+          lines:
+            - "Decision候補: {n}件抽出"
+            - "マージ候補: {m}件"
+            - "不足質問: {q}件生成"
+        - step: "notify_optional"
+          tool: "notify_in_app"
+          when: "NEEDS_INFO or READY_TO_DECIDE created"
+          note: "MVPは不要でもOK。Exec Viewのベル演出に使える"
+
+      outputs:
+        - "meeting.status = DONE"
+        - "meeting.extracted.decisionIds updated"
+        - "agent_run 기록"
+
+    # ----------------------------
+    # 2) Gap Questioner
+    # ----------------------------
+    GapQuestionerWorkflow:
+      purpose: "DecisionのmissingFieldsから、最大3問の最小質問セットを生成してin-app chatに投稿"
+      inputs:
+        projectId: "string"
+        decisionId: "string"
+        threadId: "string"
+      constraints:
+        max_questions: 3
+        question_types_priority:
+          - "single_select (owner)"
+          - "multi_select (criteria)"
+          - "date (due)"
+          - "text (fallback)"
+      steps:
+        - step: "fetch_decision"
+          tool: "get_decision"
+        - step: "llm_generate_questions"
+          llm:
+            provider: "Vertex AI Gemini"
+            model: "${VERTEX_MODEL}"
+            temperature: "${TEMPERATURE_QUESTIONER}"
+            max_output_tokens: "${MAX_OUTPUT_TOKENS_QUESTIONER}"
+            prompt_files:
+              system: "prompts/system.md"
+              task: "prompts/gap_questioner.md"
+            output_format: "JSON strictly"
+            expected_json: "Question[]"
+          postprocess:
+            - "dedupe questions"
+            - "ensure <=3"
+            - "map_to fields (owner/due/criteria/options/etc)"
+        - step: "post_to_chat"
+          tool: "post_question_set"
+          body:
+            content: "不足を埋めるために3点だけ確認させてください"
+            metadata:
+              questions: "generated"
+      outputs:
+        - "Message created in thread"
+
+    # ----------------------------
+    # 3) Reply Integrator
+    # ----------------------------
+    ReplyIntegratorWorkflow:
+      purpose: "ユーザー回答（ANSWER_SET）をDecision構造に反映し、状態を前進させる"
+      triggers:
+        - "API: POST chat message format=ANSWER_SET -> Cloud Tasks enqueue /tasks/reply_integrator"
+      inputs:
+        projectId: "string"
+        decisionId: "string"
+        threadId: "string"
+        messageId: "string"
+      idempotency:
+        key: "messageId"
+        rule: "同一messageIdはno-op"
+      steps:
+        - step: "fetch_decision"
+          tool: "get_decision"
+        - step: "fetch_message"
+          note: "APIに message取得が必要（この仕様に含める）"
+          tool: "api_get_message"
+          required_api_addition:
+            method: "GET"
+            path: "/api/chat/threads/{threadId}/messages/{messageId}"
+        - step: "interpret_answers"
+          logic:
+            - "metadata.answersから直接マッピングできるものはルールで反映"
+            - "自由入力があればLLMで補助（短い）"
+        - step: "llm_optional_refine"
+          when: "free_text_present"
+          llm:
+            provider: "Vertex AI Gemini"
+            model: "${VERTEX_MODEL}"
+            temperature: 0.1
+            max_output_tokens: 512
+            prompt_files:
+              system: "prompts/system.md"
+              task: "prompts/reply_integrator.md"
+            output_format: "JSON strictly"
+            expected_json: "DecisionPatch"
+        - step: "patch_decision"
+          tool: "upsert_decision"
+          body: "DecisionPatch merged (rule+llm)"
+        - step: "recompute_readiness"
+          logic:
+            - "missingFieldsが空ならREADY_TO_DECIDE"
+            - "まだ残るならNEEDS_INFO"
+        - step: "post_system_message"
+          tool: "post_question_set"
+          note: "format=TEXTのpost toolが別途必要なら追加"
+          behavior: "状態遷移の結果をチャットに通知（例: READYになりました）"
+      outputs:
+        - "Decision updated"
+        - "state advanced"
+        - "optional notification"
+
+    # ----------------------------
+    # 4) Draft Actions Skill
+    # ----------------------------
+    DraftActionsSkillWorkflow:
+      purpose: "Decisionの内容からPrep/Execアクション素案を生成してActionとして一括作成"
+      triggers:
+        - "UI: S5『素案生成（Skill）』 -> API enqueue /tasks/draft_actions_skill"
+      inputs:
+        projectId: "string"
+        decisionId: "string"
+      constraints:
+        max_actions_total: 8
+        split:
+          prep: "max 5"
+          exec: "max 3"
+      steps:
+        - step: "fetch_decision"
+          tool: "get_decision"
+        - step: "llm_generate_action_drafts"
+          llm:
+            provider: "Vertex AI Gemini"
+            model: "${VERTEX_MODEL}"
+            temperature: "${TEMPERATURE_ACTIONS}"
+            max_output_tokens: "${MAX_OUTPUT_TOKENS_ACTIONS}"
+            prompt_files:
+              system: "prompts/system.md"
+              task: "prompts/draft_actions.md"
+            output_format: "JSON strictly"
+            expected_json: "ActionDraft[]"
+          postprocess:
+            - "ensure PREP/EXEC counts within limit"
+            - "titles <= 60 chars"
+        - step: "create_actions_bulk"
+          tool: "create_actions_bulk"
+          body:
+            actions: "drafts"
+        - step: "notify_chat_optional"
+          tool: "notify_in_app"
+          body:
+            eventType: "DRAFT_ACTIONS_CREATED"
+            title: "アクション素案を作成しました"
+            link: "/p/:projectId/decisions/:decisionId"
+      outputs:
+        - "Actions created"
+
+  # ============================================================
+  # Prompt Design (files)
+  # ============================================================
+  prompts:
+    system_md:
+      goals:
+        - "社内PJの決裁を構造化する"
+        - "不足は最大3問で埋める"
+        - "曖昧な場合は推測せず 'unknown' を返す"
+      safety:
+        - "個人情報を推測しない"
+        - "決裁を勝手に確定しない（requiresHumanApproval）"
+      tone: "業務用・簡潔"
+    meeting_structurer_md:
+      instructions:
+        - "入力の会議メモから、決裁（Decision）候補を抽出"
+        - "Projectの既存Decision候補と照合し、同一可能性が高い場合は mergeCandidate を付与"
+        - "Decisionは構造化（options, rationale, assumptions, reopenTriggers）"
+        - "missingFields と completenessScore を必ず出す"
+        - "evidenceQuotes は会議文から短く引用（<=200 chars）"
+      output_schema: "DecisionExtract[] JSON"
+    gap_questioner_md:
+      instructions:
+        - "missingFieldsを埋めるための最小質問セット（最大3問）"
+        - "owner/due/criteriaを優先"
+        - "選択式を優先し、自由記述は最後の手段"
+      output_schema: "Question[] JSON"
+    reply_integrator_md:
+      instructions:
+        - "ユーザー回答をDecisionPatchに変換"
+        - "不確実な場合は変更しない"
+      output_schema: "DecisionPatch JSON"
+    draft_actions_md:
+      instructions:
+        - "Decisionの内容からPrep/Execアクション案を作る"
+        - "Prepは決裁に必要な情報収集・合意形成・比較作業"
+        - "Execは決裁後の実行タスク"
+        - "担当者や期限は推奨としてsuggestionに入れる（確定しない）"
+      output_schema: "ActionDraft[] JSON"
+
+  # ============================================================
+  # Observability & Ops
+  # ============================================================
+  observability:
+    logs:
+      format: "JSON structured"
+      fields:
+        - "runId"
+        - "workflow"
+        - "projectId"
+        - "meetingId?"
+        - "decisionId?"
+        - "idempotencyKey"
+        - "status"
+        - "latencyMs"
+        - "tokens(prompt/output)?"
+    agent_run_recording:
+      store_via_api: true
+      meeting_agent_runs: "projects/{projectId}/meetings/{meetingId}/agent_runs/{runId}"
+      retention: "MVP unlimited; later TTL 30-90 days"
+    error_handling:
+      classification:
+        - "TRANSIENT: 429/5xx/timeouts -> retry"
+        - "PERMANENT: schema validation failure after retry -> FAILED"
+      retry_budget:
+        - "Cloud Tasks handles retries"
+        - "agent internal retry only for API calls"
+    cost_controls:
+      - "candidate_decisions limit = MAX_CONTEXT_DECISIONS (default 10)"
+      - "rawText truncate to max chars"
+      - "two-pass prompting: extract -> questions"
+      - "temperature low for extraction"
+    security:
+      - "service-to-service auth (OIDC)"
+      - "no direct Firestore access from agent"
+      - "secrets in Secret Manager"
+      - "log redaction for rawText (do not log full meeting text)"
+
+  # ============================================================
+  # Implementation Notes (MVP choices)
+  # ============================================================
+  mvp_decisions:
+    - "Auto-run on meeting creation via Cloud Tasks"
+    - "No auto-merge. Human approval required"
+    - "Chat is IN_APP only"
+    - "Notifications IN_APP only"
+    - "Agenda generation can be API-side heuristic (no agent) for mock"
+    - "Use shadcn/ui patterns on UI; agent ensures structured fields"
+
+  required_api_additions_for_agent:
+    # 既存YAMLに足りない/ここで明確化したいエンドポイント
+    - method: "GET"
+      path: "/api/chat/threads/{threadId}/messages/{messageId}"
+      purpose: "ReplyIntegratorで単一メッセージ取得（冪等/確実）"
+    - method: "POST"
+      path: "/api/projects/{projectId}/decisions"
+      purpose: "MeetingStructurerが新規Decision作成"
+    - method: "POST"
+      path: "/api/projects/{projectId}/decisions/{decisionId}/link_meeting"
+      purpose: "meetingIdをDecisionへ紐付け"
+    - method: "POST"
+      path: "/api/projects/{projectId}/decisions/{decisionId}/actions/bulk"
+      purpose: "アクション素案を一括作成"
+    - method: "POST"
+      path: "/api/projects/{projectId}/meetings/{meetingId}/logs"
+      purpose: "会議詳細のエージェントログカード表示用"

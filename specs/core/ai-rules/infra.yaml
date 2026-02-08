@@ -1,0 +1,28 @@
+ai_rules_infra:
+  id: "AI-RULES-INFRA-001"
+  scope: "/infra (Terraform想定)"
+  invariants:
+    - "最小構成: Cloud Run(api, agent) + Firestore + Cloud Tasks + SA + IAM"
+    - "再デプロイでDBを消さない（Firestoreは破壊操作をデフォルト禁止）"
+    - "secretはenv直書きせず、最終的にはSecret Managerへ寄せられる設計"
+  required_resources_mvp:
+    - "Cloud Run service: kimeboard-api"
+    - "Cloud Run service: kimeboard-agent"
+    - "Firestore database (native)"
+    - "Cloud Tasks queue"
+    - "Service account for tasks OIDC"
+    - "IAM: tasks SA -> invoke agent run"
+    - "IAM: api/agent -> firestore access"
+  domain_and_publication:
+    mvp_target: "mvp.<domain>/"
+    policy:
+      - "DNS/証明書/ロードバランサはMVPでは簡略化可能（Cloud RunのURLでもよい）"
+      - "ただし『mvpサブドメイン対応設計』は仕様に明記"
+    keep_open:
+      - "Cloud Run custom domain mapping"
+      - "HTTPS load balancer + Cloud Armor"
+      - "IAP"
+  safety_guards:
+    - "terraform destroy を前提にしない"
+    - "state 管理（GCS backend）を推奨"
+    - "plan/apply は環境変数と tfvars で分離"

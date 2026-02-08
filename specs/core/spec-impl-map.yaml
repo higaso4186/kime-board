@@ -1,0 +1,674 @@
+﻿spec_impl_map:
+  meta:
+    name: "仕様 ↔ 実装（ファイル）対応表"
+    version: "0.1.0-mvp"
+    scope:
+      - "apps/api/src/shared (co-located shared module)"
+      - "apps/web (Next.js App Router, UI mock)"
+      - "apps/api (Next.js Route Handlers)"
+      - "apps/agent (FastAPI task worker)"
+      - "infra (Terraform + operation scripts + Firestore artifacts)"
+    notes:
+      - "apps/web / apps/api / apps/agent はMVP実装済み（UIはモック中心）。"
+      - "mvp.yaml の章立てに寄せて対応付けしている。"
+
+  shared:
+    path_root: "apps/api/src/shared"
+    responsibilities:
+      domain_model:
+        description: "ドメイン型（Zod）と共通定数"
+        files:
+          - file: "apps/api/src/shared/domain/project.ts"
+            provides:
+              - "Project schema"
+              - "ProjectCounters schema"
+          - file: "apps/api/src/shared/domain/meeting.ts"
+            provides:
+              - "Meeting schema"
+              - "MeetingSource/MeetingRaw/MeetingAgent/MeetingExtracted"
+          - file: "apps/api/src/shared/domain/decision.ts"
+            provides:
+              - "Decision schema"
+              - "DecisionOption/DecisionOwner/Rationale/Completeness/Merge"
+          - file: "apps/api/src/shared/domain/action.ts"
+            provides:
+              - "Action schema"
+              - "ActionAssignee schema"
+          - file: "apps/api/src/shared/domain/chat.ts"
+            provides:
+              - "Thread schema"
+              - "Message schema"
+              - "Question/Answer schema"
+              - "ChatChannel/SenderType"
+          - file: "apps/api/src/shared/domain/notification.ts"
+            provides:
+              - "Notification schema"
+        related_constants:
+          - file: "apps/api/src/shared/constants/status.ts"
+            provides:
+              - "DecisionStatus/MeetingStatus/ActionStatus/ActionType/ChatFormat"
+              - "NotificationEventType"
+          - file: "apps/api/src/shared/constants/roles.ts"
+            provides: ["ProjectRole"]
+          - file: "apps/api/src/shared/constants/limits.ts"
+            provides: ["LIMITS"]
+          - file: "apps/api/src/shared/constants/routes.ts"
+            provides: ["ROUTES"]
+          - file: "apps/api/src/shared/constants/errors.ts"
+            provides: ["ErrorCode"]
+
+      dto_contracts:
+        description: "API Request/Response（Zod）"
+        files:
+          - file: "apps/api/src/shared/dto/projects.ts"
+            provides:
+              - "CreateProjectRequest"
+              - "CreateProjectResponse"
+          - file: "apps/api/src/shared/dto/meetings.ts"
+            provides:
+              - "CreateMeetingRequest"
+              - "CreateMeetingResponse"
+          - file: "apps/api/src/shared/dto/decisions.ts"
+            provides:
+              - "DecisionSummary"
+              - "PatchDecisionRequest"
+              - "PatchDecisionResponse"
+          - file: "apps/api/src/shared/dto/actions.ts"
+            provides:
+              - "CreateActionRequest"
+              - "BulkCreateActionsRequest"
+          - file: "apps/api/src/shared/dto/chat.ts"
+            provides:
+              - "CreateThreadRequest/CreateThreadResponse"
+              - "PostMessageRequest/PostMessageResponse"
+              - "ListMessagesResponse"
+          - file: "apps/api/src/shared/dto/notifications.ts"
+            provides:
+              - "CreateNotificationRequest/CreateNotificationResponse"
+              - "ListNotificationsResponse"
+          - file: "apps/api/src/shared/dto/agendas.ts"
+            provides:
+              - "GenerateAgendaRequest/Response (MVPでは任意運用)"
+          - file: "apps/api/src/shared/dto/envelope.ts"
+            provides:
+              - "ErrorResponse"
+              - "Paginated helper"
+
+      rules:
+        description: "状態判定・下書き生成ルール"
+        files:
+          - file: "apps/api/src/shared/rules/decision_readiness.ts"
+            provides:
+              - "computeDecisionReadiness"
+              - "isReadyToDecide"
+              - "DecisionMissingField/DecisionReadiness"
+          - file: "apps/api/src/shared/rules/decision_merge.ts"
+            provides:
+              - "MERGE_POLICY"
+              - "classifyMergeScore"
+          - file: "apps/api/src/shared/rules/agenda_builder.ts"
+            provides:
+              - "buildAgendaDraft"
+              - "AgendaDraft/AgendaItem"
+
+      utils:
+        description: "共通ユーティリティ"
+        files:
+          - file: "apps/api/src/shared/utils/id.ts"
+            provides: ["newId", "isValidId"]
+          - file: "apps/api/src/shared/utils/time.ts"
+            provides: ["nowIso", "toIso", "parseIso"]
+          - file: "apps/api/src/shared/utils/text.ts"
+            provides: ["normalizeWhitespace", "truncate"]
+          - file: "apps/api/src/shared/utils/result.ts"
+            provides: ["Result/ok/err/unwrap"]
+          - file: "apps/api/src/shared/utils/assert.ts"
+            provides: ["assertNever"]
+
+      exports:
+        description: "shared公開面（import窓口）"
+        files:
+          - file: "apps/api/src/shared/index.ts"
+            provides:
+              - "全export集約"
+          - file: "apps/api/package.json"
+            provides:
+              - "api runtime/build scripts"
+              - "shared module consumer dependencies"
+
+  api:
+    path_root: "apps/api"
+    responsibilities:
+      runtime_and_build:
+        files:
+          - file: "apps/api/next.config.mjs"
+            provides:
+              - "output: standalone (Cloud Run向け)"
+          - file: "apps/api/package.json"
+            provides:
+              - "Next.js + Firestore + Cloud Tasks deps"
+              - "scripts: dev/build/start/typecheck"
+          - file: "apps/api/tsconfig.json"
+            provides:
+              - "TypeScript strict settings"
+
+      http_and_validation:
+        description: "共通エラーハンドリング・Zodバリデーション"
+        files:
+          - file: "apps/api/src/lib/http.ts"
+            provides:
+              - "jsonOk/jsonCreated/jsonNoContent/jsonError"
+              - "toApiError/fromZodError"
+              - "ErrorCode整形"
+          - file: "apps/api/src/lib/zod.ts"
+            provides:
+              - "parseJson()"
+              - "validate(schema, data)"
+
+      firestore_access:
+        description: "Firestore client & collection名"
+        files:
+          - file: "apps/api/src/lib/firestore.ts"
+            provides:
+              - "db (Firestore client)"
+              - "COL collection constants"
+              - "nowIso()"
+
+      id_generation:
+        description: "プレフィックス付きID生成"
+        files:
+          - file: "apps/api/src/lib/id.ts"
+            provides:
+              - "newProjectId/newMeetingId/newDecisionId/newActionId/newThreadId/newMessageId/newNotificationId/newRunId"
+
+      tasks_enqueue:
+        description: "Cloud Tasks enqueue（API -> Agent）"
+        files:
+          - file: "apps/api/src/lib/tasks.ts"
+            provides:
+              - "enqueueJsonTask(kind, payload, idempotencyKey?)"
+              - "OIDC token config (TASK_OIDC_SERVICE_ACCOUNT_EMAIL)"
+        env_dependencies:
+          required:
+            - "CLOUD_TASKS_QUEUE"
+            - "CLOUD_TASKS_LOCATION (or GCP_REGION)"
+            - "GOOGLE_CLOUD_PROJECT (or FIRESTORE_PROJECT_ID)"
+            - "TASK_OIDC_SERVICE_ACCOUNT_EMAIL"
+            - "AGENT_TASK_URL_MEETING/REPLY/ACTIONS"
+
+      security_internal_callback:
+        description: "Agent callback用の簡易トークン認証（fail-closed）"
+        files:
+          - file: "apps/api/src/lib/auth.ts"
+            provides:
+              - "requireAgentToken(req)"
+        env_dependencies:
+          required:
+            - "AGENT_CALLBACK_TOKEN"
+        contract:
+          header: "X-Agent-Token"
+
+      repositories:
+        description: "Firestore操作（CRUD/Upsert）"
+        files:
+          - file: "apps/api/src/repo/projects.ts"
+            provides:
+              - "createProject"
+              - "getProject"
+          - file: "apps/api/src/repo/meetings.ts"
+            provides:
+              - "createMeeting (status=ANALYZING)"
+              - "getMeeting"
+              - "patchMeeting"
+          - file: "apps/api/src/repo/decisions.ts"
+            provides:
+              - "createDecision"
+              - "getDecision"
+              - "listDecisionsByProject"
+              - "patchDecision (readiness再計算)"
+              - "linkMeetingToDecision"
+          - file: "apps/api/src/repo/actions.ts"
+            provides:
+              - "bulkCreateActions"
+          - file: "apps/api/src/repo/chat.ts"
+            provides:
+              - "createThread"
+              - "postMessage"
+              - "getMessage"
+              - "listMessages"
+          - file: "apps/api/src/repo/notifications.ts"
+            provides:
+              - "createNotification"
+              - "listNotifications"
+          - file: "apps/api/src/repo/decisions_agent.ts"
+            provides:
+              - "upsertDecisionsFromAgent (Decision upsert + meeting link + readiness再計算 + status補正)"
+          - file: "apps/api/src/repo/questions_agent.ts"
+            provides:
+              - "ensureDecisionThread (projectId+decisionId lookup)"
+              - "postQuestionSet (QUESTION_SET message + metadataにprojectId/decisionIdを同梱)"
+          - file: "apps/api/src/repo/agent_runs.ts"
+            provides:
+              - "startRun/finishRun/upsertRunByIdempotency"
+            status:
+              mvp: "任意（観測性強化のための足場）"
+
+      routes_health:
+        description: "ヘルスチェック"
+        files:
+          - file: "apps/api/app/healthz/route.ts"
+            provides:
+              - "GET /healthz"
+          - file: "apps/api/app/api/healthz/route.ts"
+            provides:
+              - "GET /api/healthz"
+          - file: "apps/api/app/api/route.ts"
+            provides:
+              - "GET /api (service info)"
+
+      routes_public_api:
+        description: "MVP公開API"
+        mapping:
+          - spec: "POST /api/projects"
+            file: "apps/api/app/api/projects/route.ts"
+            provides:
+              - "CreateProjectRequest validate"
+              - "CreateProjectResponse"
+          - spec: "GET /api/projects/{projectId}"
+            file: "apps/api/app/api/projects/[projectId]/route.ts"
+            provides:
+              - "getProject"
+          - spec: "POST /api/projects/{projectId}/meetings"
+            file: "apps/api/app/api/projects/[projectId]/meetings/route.ts"
+            provides:
+              - "CreateMeetingRequest validate"
+              - "createMeeting"
+              - "enqueueJsonTask(meeting_structurer)"
+          - spec: "GET /api/projects/{projectId}/meetings/{meetingId}"
+            file: "apps/api/app/api/projects/[projectId]/meetings/[meetingId]/route.ts"
+            provides:
+              - "getMeeting"
+          - spec: "GET /api/projects/{projectId}/decisions"
+            file: "apps/api/app/api/projects/[projectId]/decisions/route.ts"
+            provides:
+              - "listDecisionsByProject (status/limit)"
+          - spec: "POST /api/projects/{projectId}/decisions (create: canonical)"
+            file: "apps/api/app/api/projects/[projectId]/decisions/route.ts"
+            provides:
+              - "local CreateDecisionRequest (zod)"
+              - "createDecision"
+          - spec: "POST /api/projects/{projectId}/decisions/create (create: compat alias)"
+            file: "apps/api/app/api/projects/[projectId]/decisions/create/route.ts"
+            provides:
+              - "local CreateDecisionRequest (zod)"
+              - "createDecision"
+            concern_refs:
+              - "API-001 (sharedにCreateDecisionRequestが無い)"
+          - spec: "GET/PATCH /api/projects/{projectId}/decisions/{decisionId}"
+            file: "apps/api/app/api/projects/[projectId]/decisions/[decisionId]/route.ts"
+            provides:
+              - "getDecision"
+              - "patchDecision (shared.PatchDecisionRequest)"
+          - spec: "POST /api/projects/{projectId}/decisions/{decisionId}/link_meeting"
+            file: "apps/api/app/api/projects/[projectId]/decisions/[decisionId]/link_meeting/route.ts"
+            provides:
+              - "linkMeetingToDecision"
+          - spec: "POST /api/projects/{projectId}/decisions/{decisionId}/actions/bulk"
+            file: "apps/api/app/api/projects/[projectId]/decisions/[decisionId]/actions/bulk/route.ts"
+            provides:
+              - "BulkCreateActionsRequest validate"
+              - "bulkCreateActions"
+          - spec: "POST /api/projects/{projectId}/decisions/{decisionId}/chat/thread"
+            file: "apps/api/app/api/projects/[projectId]/decisions/[decisionId]/chat/thread/route.ts"
+            provides:
+              - "CreateThreadRequest validate"
+              - "createThread"
+          - spec: "POST /api/chat/threads/{threadId}/messages"
+            file: "apps/api/app/api/chat/threads/[threadId]/messages/route.ts"
+            provides:
+              - "PostMessageRequest validate"
+              - "postMessage"
+              - "enqueueJsonTask(reply_integrator) (format==ANSWER_SET; relatesTo/metadata/thread doc の順で解決)"
+          - spec: "GET /api/chat/threads/{threadId}/messages/list"
+            file: "apps/api/app/api/chat/threads/[threadId]/messages/list/route.ts"
+            provides:
+              - "listMessages"
+          - spec: "GET /api/chat/threads/{threadId}/messages/{messageId}"
+            file: "apps/api/app/api/chat/threads/[threadId]/messages/[messageId]/route.ts"
+            provides:
+              - "getMessage"
+          - spec: "POST/GET /api/projects/{projectId}/notifications"
+            file: "apps/api/app/api/projects/[projectId]/notifications/route.ts"
+            provides:
+              - "CreateNotificationRequest validate"
+              - "listNotifications"
+          - spec: "POST /api/projects/{projectId}/decisions/{decisionId}/skills/draft_actions"
+            file: "apps/api/app/api/projects/[projectId]/decisions/[decisionId]/skills/draft_actions/route.ts"
+            provides:
+              - "enqueueJsonTask(draft_actions_skill)"
+
+      routes_internal_agent:
+        description: "Agent -> API callback（内部）"
+        mapping:
+          - spec: "GET /api/internal/agent"
+            file: "apps/api/app/api/internal/agent/route.ts"
+            provides:
+              - "health-ish internal"
+          - spec: "POST /api/internal/agent/callback"
+            file: "apps/api/app/api/internal/agent/callback/route.ts"
+            provides:
+              - "requireAgentToken"
+              - "AgentCallbackUnion validate"
+              - "meeting_structurer: upsert decisions + patch meeting + question set message"
+              - "reply_integrator: patch decision"
+              - "draft_actions_skill: bulk create actions"
+          - spec: "Callback schemas"
+            file: "apps/api/app/api/internal/agent/callback/_schemas.ts"
+            provides:
+              - "AgentCallbackBase"
+              - "AgentMeetingStructurerCallback"
+              - "AgentReplyIntegratorCallback"
+              - "AgentDraftActionsCallback"
+              - "AgentCallbackUnion"
+
+  agent:
+    path_root: "apps/agent"
+    responsibilities:
+      runtime_and_build:
+        files:
+          - file: "apps/agent/pyproject.toml"
+            provides:
+              - "FastAPI/Pydantic/httpx dependencies"
+              - "pytest config"
+          - file: "apps/agent/Dockerfile"
+            provides:
+              - "Cloud Run container entrypoint"
+          - file: "apps/agent/.env.example"
+            provides:
+              - "API_BASE_URL / AGENT_CALLBACK_TOKEN / TASK_AUTH_MODE defaults"
+
+      server_interface:
+        files:
+          - file: "apps/agent/src/server.py"
+            provides:
+              - "GET /healthz"
+              - "POST /tasks/meeting_structurer"
+              - "POST /tasks/reply_integrator"
+              - "POST /tasks/draft_actions_skill"
+              - "task auth verification (NONE|TOKEN|OIDC)"
+          - file: "apps/agent/src/main.py"
+            provides:
+              - "ASGI app export"
+
+      config_and_security:
+        files:
+          - file: "apps/agent/src/config.py"
+            provides:
+              - "env-backed settings"
+              - "limits/temperature/safe mode flags"
+          - file: "apps/agent/src/auth/oidc.py"
+            provides:
+              - "Cloud Tasks request verification"
+              - "callback token header helper"
+
+      api_tools:
+        files:
+          - file: "apps/agent/src/api_client/endpoints.py"
+            provides:
+              - "API route templates"
+          - file: "apps/agent/src/api_client/client.py"
+            provides:
+              - "typed API client with retry"
+              - "meeting/decision/message fetch"
+              - "meeting log post"
+              - "internal callback post"
+          - file: "apps/agent/src/tools/kimeboard_api_tools.py"
+            provides:
+              - "workflow-facing toolset wrapper"
+
+      workflows:
+        files:
+          - file: "apps/agent/src/agents/workflows/meeting_structurer.py"
+            provides:
+              - "meeting text parsing -> decision extracts"
+              - "candidate decision matching"
+              - "question set generation trigger"
+              - "meeting_structurer callback payload generation"
+          - file: "apps/agent/src/agents/workflows/gap_questioner.py"
+            provides:
+              - "max 3 question generation from missing fields"
+              - "maps_to targetType/field normalization"
+          - file: "apps/agent/src/agents/workflows/reply_integrator.py"
+            provides:
+              - "ANSWER_SET -> appliedPatch mapping"
+              - "reply_integrator callback payload generation"
+          - file: "apps/agent/src/agents/workflows/draft_actions_skill.py"
+            provides:
+              - "decision -> PREP/EXEC action draft generation"
+              - "draft_actions_skill callback payload generation"
+          - file: "apps/agent/src/agents/root_agent.py"
+            provides:
+              - "workflow orchestration"
+              - "idempotency key guard"
+
+      observability_and_utils:
+        files:
+          - file: "apps/agent/src/observability/logger.py"
+            provides:
+              - "structured JSON logs (structlog)"
+          - file: "apps/agent/src/observability/runlog.py"
+            provides:
+              - "runId helpers / run context"
+          - file: "apps/agent/src/utils/idempotency.py"
+            provides:
+              - "in-memory idempotency cache with TTL"
+          - file: "apps/agent/src/utils/text.py"
+            provides:
+              - "text normalization/truncation/date heuristics"
+          - file: "apps/agent/src/utils/limits.py"
+            provides:
+              - "question/action/raw-text limits"
+
+      schemas_and_contract_tests:
+        files:
+          - file: "apps/agent/src/models/schemas.py"
+            provides:
+              - "task request schemas"
+              - "API response schemas"
+              - "agent callback payload schemas"
+              - "legacy question map shape (decision_field) compatibility"
+          - file: "apps/agent/tests/test_schemas.py"
+            provides:
+              - "spec sample payload compatibility tests"
+          - file: "apps/agent/tests/test_idempotency.py"
+            provides:
+              - "idempotency behavior tests"
+
+      api_connection_points:
+        uses:
+          - "GET /api/projects/{projectId}/meetings/{meetingId}"
+          - "GET /api/projects/{projectId}/decisions"
+          - "GET /api/projects/{projectId}/decisions/{decisionId}"
+          - "GET /api/chat/threads/{threadId}/messages/{messageId}"
+          - "POST /api/projects/{projectId}/meetings/{meetingId}/logs"
+          - "POST /api/internal/agent/callback"
+        note:
+          - "Agent is DB-direct free; all writes are routed via API callback."
+
+  web:
+    path_root: "apps/web"
+    responsibilities:
+      runtime_and_theme:
+        files:
+          - file: "apps/web/src/app/layout.tsx"
+            provides:
+              - "global layout"
+              - "font/theme/icon metadata wiring"
+          - file: "apps/web/src/app/globals.css"
+            provides:
+              - "design tokens"
+              - "base theme styles"
+      routing_and_shell:
+        files:
+          - file: "apps/web/src/app/projects/page.tsx"
+            provides:
+              - "S1 プロジェクト一覧"
+          - file: "apps/web/src/app/p/[projectId]/layout.tsx"
+            provides:
+              - "S2-S9 共通シェル"
+          - file: "apps/web/src/components/layout/project-shell.tsx"
+            provides:
+              - "header/sidebar/right-panel layout"
+              - "project navigation"
+      screen_pages:
+        files:
+          - file: "apps/web/src/app/p/[projectId]/page.tsx"
+            provides: ["S2 プロジェクトホーム"]
+          - file: "apps/web/src/app/p/[projectId]/meetings/new/page.tsx"
+            provides: ["S3 会議作成"]
+          - file: "apps/web/src/app/p/[projectId]/meetings/[meetingId]/page.tsx"
+            provides: ["S4 会議詳細"]
+          - file: "apps/web/src/app/p/[projectId]/decisions/[decisionId]/page.tsx"
+            provides: ["S5 決裁詳細"]
+          - file: "apps/web/src/app/p/[projectId]/chat/page.tsx"
+            provides: ["S6 チャット"]
+          - file: "apps/web/src/app/p/[projectId]/decisions/page.tsx"
+            provides: ["S7 決裁ビュー（kanban/list）"]
+          - file: "apps/web/src/app/p/[projectId]/agendas/new/page.tsx"
+            provides: ["S8 アジェンダ作成"]
+          - file: "apps/web/src/app/p/[projectId]/exec/page.tsx"
+            provides: ["S9 管理職ビュー"]
+      mock_data:
+        files:
+          - file: "apps/web/src/lib/mock/data.ts"
+            provides:
+              - "UI mock entities"
+              - "不足質問（project>decision / project>decision>action）データ構造"
+          - file: "apps/web/src/lib/routes.ts"
+            provides:
+              - "route constants/helpers"
+
+  infra:
+    path_root: "infra"
+    responsibilities:
+      terraform_root:
+        files:
+          - file: "infra/terraform/main.tf"
+            provides:
+              - "module composition (foundation/db/adk/cloud_run)"
+          - file: "infra/terraform/variables.tf"
+            provides:
+              - "infra input contract"
+          - file: "infra/terraform/outputs.tf"
+            provides:
+              - "shared infra outputs"
+      terraform_modules:
+        files:
+          - file: "infra/terraform/modules/foundation/main.tf"
+            provides:
+              - "API enablement"
+              - "artifact registry"
+              - "service accounts & IAM"
+              - "secret manager"
+          - file: "infra/terraform/modules/db/main.tf"
+            provides:
+              - "Firestore database resource"
+          - file: "infra/terraform/modules/adk/main.tf"
+            provides:
+              - "Cloud Tasks queue for agent dispatch"
+          - file: "infra/terraform/modules/cloud_run/main.tf"
+            provides:
+              - "web/api/agent Cloud Run service definitions (optional enable)"
+      operations:
+        files:
+          - file: "infra/scripts/glogin.ps1"
+            provides:
+              - "gcloud login + adc login + project set flow"
+          - file: "infra/scripts/infra.ps1"
+            provides:
+              - "component-wise (foundation/db/adk/cloudrun) execution"
+              - "all-in-one execution"
+              - "optional Firestore artifacts deploy"
+      firestore_artifacts:
+        files:
+          - file: "infra/firestore/firestore.rules"
+            provides:
+              - "Firestore security rules artifact"
+          - file: "infra/firestore/firestore.indexes.json"
+            provides:
+              - "Firestore index artifact"
+          - file: "infra/firestore/migration-notes.md"
+            provides:
+              - "schema/migration gap notes"
+
+  spec_items_cross_reference:
+    mvp_yaml_items:
+      - spec_id: "SEC-001"
+        spec_area: "security_mvp.public_api"
+        implemented: false
+        files_to_change:
+          - "apps/api/* (middleware or per-route auth)"
+        note: "MVPでは未導入。公開方法（限定公開/IAP等）を別途定義推奨。"
+      - spec_id: "CHAT-001"
+        spec_area: "flows.fill_missing_info"
+        implemented: true
+        evidence_files:
+          - "apps/api/app/api/chat/threads/[threadId]/messages/route.ts"
+          - "apps/api/src/repo/questions_agent.ts"
+        note: "metadata未指定でも thread doc から projectId/decisionId を解決できる。"
+      - spec_id: "API-001"
+        spec_area: "dto_contracts.decisions.create"
+        implemented: partial
+        evidence_files:
+          - "apps/api/app/api/projects/[projectId]/decisions/route.ts"
+          - "apps/api/app/api/projects/[projectId]/decisions/create/route.ts"
+          - "apps/api/src/shared/dto/decisions.ts"
+        note: "CreateDecisionRequest は shared dto 未収載。現状は route-local zod で運用。"
+      - spec_id: "DATA-001"
+        spec_area: "firestore.meetings.raw"
+        implemented: partial
+        evidence_files:
+          - "apps/api/src/shared/domain/meeting.ts"
+          - "apps/api/src/repo/meetings.ts"
+        note: "GCSへの退避は設計だけ。MVPはFirestore直保存。"
+      - spec_id: "INFRA-001"
+        spec_area: "infra.component_execution"
+        implemented: true
+        evidence_files:
+          - "infra/scripts/infra.ps1"
+          - "infra/terraform/main.tf"
+          - "infra/README.md"
+        note: "db/adk 等の個別実行と all 一括実行を両対応。"
+
+  quick_navigation:
+    - label: "APIの入口（Routes）"
+      paths:
+        - "apps/api/app/api/**/route.ts"
+        - "apps/api/app/healthz/route.ts"
+    - label: "API共通ユーティリティ"
+      paths:
+        - "apps/api/src/lib/http.ts"
+        - "apps/api/src/lib/zod.ts"
+        - "apps/api/src/lib/firestore.ts"
+        - "apps/api/src/lib/tasks.ts"
+        - "apps/api/src/lib/auth.ts"
+    - label: "Repo層"
+      paths:
+        - "apps/api/src/repo/*.ts"
+    - label: "Shared（型・DTO・ルール）"
+      paths:
+        - "apps/api/src/shared/domain/*.ts"
+        - "apps/api/src/shared/dto/*.ts"
+        - "apps/api/src/shared/rules/*.ts"
+        - "apps/api/src/shared/constants/*.ts"
+    - label: "Web UI（App Router）"
+      paths:
+        - "apps/web/src/app/**/page.tsx"
+        - "apps/web/src/components/layout/*.tsx"
+        - "apps/web/src/lib/mock/data.ts"
+    - label: "Infra（Terraform + Scripts）"
+      paths:
+        - "infra/terraform/**/*.tf"
+        - "infra/scripts/*.ps1"
+        - "infra/firestore/*"
+

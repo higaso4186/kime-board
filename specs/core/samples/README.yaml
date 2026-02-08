@@ -1,0 +1,74 @@
+samples:
+  meeting_structurer_succeeded:
+    headers:
+      X-Agent-Token: "<AGENT_CALLBACK_TOKEN>"
+    body:
+      projectId: "prj_xxx"
+      kind: "meeting_structurer"
+      status: "SUCCEEDED"
+      meetingId: "mtg_xxx"
+      idempotencyKey: "mtg_xxx"
+      extracted:
+        decisions:
+          - title: "配送業者をA社に切り替えるか"
+            summary: "コストと遅延率の改善が狙い"
+            ownerDisplayName: "部長A"
+            dueAt: "2026-02-15T00:00:00.000Z"
+            options:
+              - label: "A社に切替"
+                recommended: true
+              - label: "現状維持"
+            criteria:
+              - "月次コスト"
+              - "遅延率"
+        questionSets:
+          - decisionRef:
+              decisionId: "dcs_xxx"
+              title: "配送業者をA社に切り替えるか"
+            hint: "決裁に必要な情報が不足しています"
+            questions:
+              - qid: "q1"
+                type: "date"
+                text: "切替の希望期限はいつですか？"
+                maps_to:
+                  decision_field: "dueAt"
+
+  reply_integrator_succeeded:
+    headers:
+      X-Agent-Token: "<AGENT_CALLBACK_TOKEN>"
+    body:
+      projectId: "prj_xxx"
+      kind: "reply_integrator"
+      status: "SUCCEEDED"
+      decisionId: "dcs_xxx"
+      threadId: "thr_xxx"
+      appliedPatch:
+        dueAt: "2026-02-20T00:00:00.000Z"
+        criteria:
+          - "月次コスト"
+          - "遅延率"
+          - "返品率"
+
+  draft_actions_skill_succeeded:
+    headers:
+      X-Agent-Token: "<AGENT_CALLBACK_TOKEN>"
+    body:
+      projectId: "prj_xxx"
+      kind: "draft_actions_skill"
+      status: "SUCCEEDED"
+      decisionId: "dcs_xxx"
+      draftActions:
+        - type: "PREP"
+          title: "A社の見積取得"
+          description: "月次契約費用と最低保証の確認"
+        - type: "EXEC"
+          title: "切替手順の社内周知"
+          dueAt: "2026-02-18T00:00:00.000Z"
+
+  curl_examples:
+    callback:
+      - |
+        curl -X POST "$API_BASE_URL/api/internal/agent/callback" \
+          -H "Content-Type: application/json" \
+          -H "X-Agent-Token: $AGENT_CALLBACK_TOKEN" \
+          -d @specs/samples/meeting_structurer_succeeded.json

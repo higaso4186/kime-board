@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>キメボード Sea Palette</title>
+    <style>
+      :root {
+        --sea-50: #eafaf9;
+        --sea-100: #d3f3f1;
+        --sea-200: #b8ebe8;
+        --sea-300: #8edfd9;
+        --sea-400: #5ecfc8;
+        --sea-500: #38bdb6;
+        --sea-600: #20b2aa;
+        --sea-700: #1b9690;
+        --sea-800: #167975;
+        --sea-900: #125d59;
+
+        --neutral-0: #ffffff;
+        --neutral-50: #f6fbfb;
+        --neutral-100: #eef6f6;
+        --neutral-200: #dbe7e7;
+        --neutral-300: #c7d6d5;
+        --neutral-700: #374b49;
+        --neutral-900: #142624;
+
+        --danger-50: #fef2f2;
+        --danger-600: #dc2626;
+        --danger-700: #b91c1c;
+
+        --line-default: #c7d6d5;
+        --line-strong: #8edfd9;
+        --line-support: #20b2aa;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: "Inter", "Noto Sans JP", sans-serif;
+        background:
+          radial-gradient(circle at 8% 0%, #d3f3f1 0%, transparent 25%),
+          radial-gradient(circle at 95% 0%, #eafaf9 0%, transparent 25%),
+          var(--neutral-50);
+        color: var(--neutral-900);
+      }
+      .wrap {
+        max-width: 1180px;
+        margin: 0 auto;
+        display: grid;
+        gap: 16px;
+      }
+      .card {
+        border: 1px solid var(--line-default);
+        border-radius: 14px;
+        background: var(--neutral-0);
+        padding: 16px;
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1 { font-size: 30px; }
+      h2 { font-size: 20px; margin-bottom: 8px; }
+      p { color: var(--neutral-700); line-height: 1.65; }
+      .muted { color: #5d7674; font-size: 13px; }
+
+      .palette {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .swatch {
+        border: 1px solid var(--line-default);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .tone { height: 68px; }
+      .meta { padding: 8px 10px; background: white; }
+      .meta strong { display: block; font-size: 13px; }
+      .meta span { font-size: 12px; color: #5d7674; }
+
+      .samples {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .sample {
+        border-radius: 12px;
+        border: 1px solid var(--line-default);
+        padding: 12px;
+      }
+      .sample h3 { font-size: 14px; margin-bottom: 4px; }
+      .sample p { font-size: 12px; }
+
+      .line-list { display: grid; gap: 8px; margin-top: 10px; }
+      .line-item {
+        border: 1px solid var(--line-default);
+        border-radius: 10px;
+        padding: 8px 10px;
+      }
+      .line-item p { font-size: 12px; }
+      .line { margin-top: 8px; height: 0; }
+
+      pre {
+        margin: 0;
+        border-radius: 10px;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 12px;
+        font-size: 12px;
+        overflow: auto;
+      }
+
+      @media (max-width: 980px) {
+        .palette { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .samples { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 640px) {
+        body { padding: 12px; }
+        .palette { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="card">
+        <h1>キメボード カラーパレット（Sea 基準）</h1>
+        <p>
+          ベース色は <strong>lightseagreen (#20B2AA)</strong>。色数を絞り、Sea系トーン + Neutral + 最小のDangerで構成します。
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>1. 単純パレット</h2>
+        <p class="muted">Sea トーン（主要UIの基準色）</p>
+        <div class="palette">
+          <div class="swatch"><div class="tone" style="background: var(--sea-50);"></div><div class="meta"><strong>sea-50</strong><span>#EAF9FA</span></div></div>
+          <div class="swatch"><div class="tone" style="background: var(--sea-200);"></div><div class="meta"><strong>sea-200</strong><span>#B8EBE8</span></div></div>
+          <div class="swatch"><div class="tone" style="background: var(--sea-400);"></div><div class="meta"><strong>sea-400</strong><span>#5ECFC8</span></div></div>
+          <div class="swatch"><div class="tone" style="background: var(--sea-600);"></div><div class="meta"><strong>sea-600</strong><span>#20B2AA</span></div></div>
+          <div class="swatch"><div class="tone" style="background: var(--sea-800);"></div><div class="meta"><strong>sea-800</strong><span>#167975</span></div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2. 文字色パターン</h2>
+        <p class="muted">濃色の上は白文字を標準とする</p>
+        <div class="samples">
+          <div class="sample" style="background: var(--sea-600); border-color: var(--sea-700); color: #fff;">
+            <h3 style="color: #fff;">Primary Button</h3>
+            <p style="color: #fff;">背景: sea-600 / 文字: white</p>
+          </div>
+          <div class="sample" style="background: var(--sea-50); border-color: var(--sea-200); color: var(--sea-800);">
+            <h3 style="color: var(--sea-800);">Secondary Button</h3>
+            <p style="color: var(--sea-800);">背景: sea-50 / 文字: sea-800</p>
+          </div>
+          <div class="sample" style="background: var(--danger-600); border-color: var(--danger-700); color: #fff;">
+            <h3 style="color: #fff;">Danger Button</h3>
+            <p style="color: #fff;">背景: danger-600 / 文字: white</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>3. 線パターン</h2>
+        <p class="muted">境界線・フロー線・支援線（点線）</p>
+        <div class="line-list">
+          <div class="line-item">
+            <p>Default Border</p>
+            <div class="line" style="border-top: 1px solid var(--line-default);"></div>
+          </div>
+          <div class="line-item">
+            <p>Strong Border</p>
+            <div class="line" style="border-top: 2px solid var(--line-strong);"></div>
+          </div>
+          <div class="line-item">
+            <p>Support Edge (Dashed)</p>
+            <div class="line" style="border-top: 2px dashed var(--line-support);"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>4. アプリ共通設定（JSON）</h2>
+        <p class="muted">`apps/web/public/palette.json` を読み込んで切替可能</p>
+        <pre>{
+  "defaultTheme": "sea",
+  "themes": {
+    "sea": { "tokens": { "--color-blue-600": "#20b2aa", "...": "..." } },
+    "sea-dark": { "tokens": { "--color-blue-600": "#198f8a", "...": "..." } }
+  }
+}</pre>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,277 @@
+backend_spec:
+  architecture:
+    services:
+      api:
+        runtime: "Next.js (Route Handlers) on Cloud Run"
+        responsibilities:
+          - "Project/Meeting/Decision/ActionのCRUD（正本）"
+          - "AuthZ（プロジェクト権限）"
+          - "Ingest受領（MVP: paste / 拡張: connectors）"
+          - "Chat（MVP: in-app thread）"
+          - "Output（MVP: in-app notification / 拡張: webhook, email, chat apps）"
+          - "Agent起動のenqueue（Cloud Tasks）"
+      agent:
+        runtime: "ADK agent (Python suggested) on Cloud Run"
+        responsibilities:
+          - "MeetingメモからDecision抽出（Vertex AI）"
+          - "Projectの既存Decision候補と照合し、マージ候補提示"
+          - "不足検知→最小質問生成"
+          - "APIツールでDecision更新＆チャット投稿"
+          - "Runログ記録（デモ用の可観測性）"
+      web:
+        runtime: "Next.js UI on Cloud Run"
+        responsibilities:
+          - "S1-S9のUI"
+          - "API呼び出し"
+          - "右パネル（チャット/ログ）表示"
+    gcp_resources:
+      datastore: "Firestore"
+      async_queue: "Cloud Tasks"
+      llm: "Vertex AI (Gemini)"
+      secrets: "Secret Manager"
+      logging: "Cloud Logging"
+
+  domain_model:
+    entities:
+      Project:
+        id: "projectId"
+        fields: ["name", "description", "createdAt", "updatedAt"]
+      Meeting:
+        id: "meetingId"
+        fields: ["projectId", "title", "heldAt?", "participants?", "source", "rawTextRef", "status", "createdAt"]
+      Decision:
+        id: "decisionId"
+        fields:
+          - "projectId"
+          - "title"
+          - "summary?"
+          - "status: NEEDS_INFO|READY_TO_DECIDE|DECIDED|REOPEN"
+          - "ownerUserId?"
+          - "dueAt?"
+          - "options[]"
+          - "rationale: {pros[], cons[], conditions[]}"
+          - "assumptions[]"
+          - "reopenTrigger[]"
+          - "tags[]"
+          - "linkedMeetingIds[]"
+          - "completenessScore (0-100)"
+          - "missingFields[]"
+          - "createdAt"
+          - "updatedAt"
+      Action:
+        id: "actionId"
+        fields:
+          - "projectId"
+          - "decisionId"
+          - "type: PREP|EXEC"
+          - "title"
+          - "assigneeUserId?"
+          - "dueAt?"
+          - "status: TODO|DOING|DONE|BLOCKED"
+          - "createdAt"
+      ConversationThread:
+        id: "threadId"
+        fields:
+          - "projectId"
+          - "scopeType: DECISION|PROJECT"
+          - "scopeId"
+          - "channel: IN_APP|WEBHOOK|EMAIL|SLACK|TEAMS"
+          - "createdAt"
+      Message:
+        id: "messageId"
+        fields:
+          - "threadId"
+          - "senderType: AGENT|USER|SYSTEM"
+          - "content"
+          - "format: TEXT|QUESTION_SET|ANSWER_SET"
+          - "metadata? (questionIds, optionIds, etc)"
+          - "createdAt"
+      AgentRun:
+        id: "runId"
+        fields:
+          - "projectId"
+          - "meetingId?"
+          - "decisionId?"
+          - "status: RUNNING|SUCCEEDED|FAILED"
+          - "startedAt"
+          - "endedAt?"
+          - "logLines[]"
+          - "error?"
+
+  extensibility:
+    connectors:
+      input:
+        contract:
+          name: "InputConnector"
+          method: "ingest(payload) -> normalized_ingest"
+          normalized_ingest:
+            fields:
+              - "source: PASTE|NOTION|TLDV|WEBHOOK|API"
+              - "projectId"
+              - "meetingMeta: {title?, heldAt?, participants?}"
+              - "rawText"
+              - "externalRef?: {system, id, url}"
+        mvp_implementation:
+          - "PasteConnector (UI貼り付け)"
+        extension_candidates:
+          - "NotionConnector (page/DBから取得)"
+          - "TlDvConnector (transcript export/webhook)"
+          - "WebhookConnector (汎用: POST)"
+      chat:
+        contract:
+          name: "ChatConnector"
+          methods:
+            - "create_thread(scopeType, scopeId, channel) -> threadId"
+            - "post_message(threadId, senderType, content, format, metadata?) -> messageId"
+            - "list_messages(threadId, cursor?) -> messages[]"
+            - "post_question_set(threadId, questions[]) -> messageId"
+            - "post_answer_set(threadId, answers[]) -> messageId"
+        mvp_implementation:
+          - "InAppChatConnector (Firestore threads/messages)"
+        extension_candidates:
+          - "WebhookChatConnector (外部に投げる/受ける)"
+          - "EmailChatConnector (送信/返信取込み)"
+          - "SlackConnector / TeamsConnector (将来)"
+      output:
+        contract:
+          name: "OutputConnector"
+          methods:
+            - "notify(eventType, target, payload) -> deliveryId"
+          event_types:
+            - "DECISION_NEEDS_INFO"
+            - "DECISION_READY_TO_DECIDE"
+            - "DECISION_DECIDED"
+            - "AGENT_RUN_FAILED"
+        mvp_implementation:
+          - "InAppNotificationConnector (アプリ内ベル/トースト/未読一覧)"
+        extension_candidates:
+          - "WebhookNotifier"
+          - "EmailNotifier"
+          - "ChatAppNotifier (Slack/Teams)"
+
+  api_endpoints:
+    auth:
+      note: "MVPは簡易AuthでもOK（社内想定）。本番はOIDC等へ拡張。"
+    routes:
+      - method: "POST"
+        path: "/api/projects"
+        body: { name: "string", description?: "string" }
+        returns: { projectId: "string" }
+      - method: "GET"
+        path: "/api/projects"
+        returns: { projects: "Project[]" }
+
+      - method: "POST"
+        path: "/api/projects/:projectId/meetings"
+        body:
+          title: "string"
+          heldAt?: "string(ISO)"
+          participants?: "string[]"
+          source: "PASTE|NOTION|TLDV|WEBHOOK|API"
+          rawText: "string"
+        behavior:
+          - "Meeting作成"
+          - "Cloud Tasksへ agent実行をenqueue（自動起動）"
+        returns: { meetingId: "string", status: "ANALYZING" }
+
+      - method: "GET"
+        path: "/api/projects/:projectId/meetings/:meetingId"
+        returns: { meeting: "Meeting", extractedDecisionIds: "string[]" }
+
+      - method: "GET"
+        path: "/api/projects/:projectId/decisions"
+        query: { status?: "string", owner?: "string", dueBefore?: "string" }
+        returns: { decisions: "Decision[]" }
+
+      - method: "GET"
+        path: "/api/projects/:projectId/decisions/:decisionId"
+        returns: { decision: "Decision", actions: "Action[]", threadId?: "string" }
+
+      - method: "PATCH"
+        path: "/api/projects/:projectId/decisions/:decisionId"
+        body:
+          updatable_fields:
+            - "title"
+            - "ownerUserId"
+            - "dueAt"
+            - "options"
+            - "rationale"
+            - "assumptions"
+            - "reopenTrigger"
+            - "tags"
+            - "status"
+        returns: { decision: "Decision" }
+
+      - method: "POST"
+        path: "/api/projects/:projectId/decisions/:decisionId/actions"
+        body: { type: "PREP|EXEC", title: "string", assigneeUserId?: "string", dueAt?: "string(ISO)" }
+        returns: { actionId: "string" }
+
+      - method: "POST"
+        path: "/api/projects/:projectId/decisions/:decisionId/chat/thread"
+        body: { channel: "IN_APP|WEBHOOK|EMAIL|SLACK|TEAMS" }
+        returns: { threadId: "string" }
+
+      - method: "GET"
+        path: "/api/chat/threads/:threadId/messages"
+        returns: { messages: "Message[]" }
+
+      - method: "POST"
+        path: "/api/chat/threads/:threadId/messages"
+        body:
+          senderType: "USER|AGENT|SYSTEM"
+          format: "TEXT|QUESTION_SET|ANSWER_SET"
+          content: "string"
+          metadata?: "object"
+        behavior:
+          - "ANSWER_SETの場合、Cloud Tasksへ agent integrate をenqueue"
+        returns: { messageId: "string" }
+
+      - method: "POST"
+        path: "/api/agendas/generate"
+        body: { projectId: "string", horizon: "THIS_WEEK|NEXT_WEEK" }
+        returns: { agendaDraft: "object", decisionIds: "string[]" }
+
+  agent_contract:
+    invocation:
+      via: "Cloud Tasks"
+      tasks:
+        - name: "agent_run_meeting_structurer"
+          payload: { projectId: "string", meetingId: "string" }
+        - name: "agent_run_reply_integrator"
+          payload: { projectId: "string", decisionId: "string", threadId: "string", messageId: "string" }
+        - name: "agent_generate_draft_actions_skill"
+          payload: { projectId: "string", decisionId: "string" }
+    tools_called_by_agent:
+      - name: "api_get_project_context"
+        method: "GET"
+        path: "/api/projects/:projectId/decisions?status=NEEDS_INFO|READY_TO_DECIDE"
+        purpose: "既存Decisionの候補取得（全件は取らない）"
+      - name: "api_upsert_decisions"
+        method: "PATCH"
+        path: "/api/projects/:projectId/decisions/:decisionId"
+        purpose: "Decision更新（マージは要確認フラグ付き）"
+      - name: "api_post_question_set"
+        method: "POST"
+        path: "/api/chat/threads/:threadId/messages"
+        purpose: "不足質問（最大3問）を投稿"
+      - name: "api_post_agent_log"
+        method: "POST"
+        path: "/api/projects/:projectId/meetings/:meetingId/logs"
+        purpose: "エージェントログ行を追加（デモ用）"
+    idempotency_and_safety:
+      - "meetingId単位でagent_runの冪等キーを持つ（重複実行しても結果が壊れない）"
+      - "Decisionマージは自動確定しない。候補提示→人が承認"
+      - "長文化防止：既存Decision候補は上位N件のみ取得（N=10等）"
+      - "失敗時はAgentRun=FAILED、UIに再実行ボタン"
+
+  non_functional:
+    reliability:
+      - "Cloud Tasksのリトライで一時障害に耐える"
+      - "Agent失敗は必ず可視化（Exec Viewにも出す）"
+    cost_controls:
+      - "LLM呼び出しは2段階（抽出→不足質問）に分け、プロンプトを短く"
+      - "Project全Decisionを毎回入れない（候補だけ）"
+    security:
+      - "APIキー/外部トークンはSecret Manager"
+      - "AgentはAPI経由でのみデータ操作"
