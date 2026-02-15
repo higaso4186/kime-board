@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# apps/web
 
-## Getting Started
+Next.js frontend for Kimeboard.
 
-First, run the development server:
+## Required env
+
+- `KIMEBOARD_API_BASE_URL`
+  - Backend API base URL for rewrite target (`/api/backend/*` -> `${KIMEBOARD_API_BASE_URL}/api/*`)
+- `NEXT_PUBLIC_API_DATA_MODE`
+  - `demo`: use `/api/demo/projects*`
+  - `production`: use `/api/projects*` (including `/api/projects/:projectId/snapshot`)
+
+## Local run
 
 ```bash
+cd apps/web
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## API mode switch
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Demo mode
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```dotenv
+KIMEBOARD_API_BASE_URL=http://localhost:3001
+NEXT_PUBLIC_API_DATA_MODE=demo
+```
 
-## Learn More
+### Production API mode
 
-To learn more about Next.js, take a look at the following resources:
+```dotenv
+KIMEBOARD_API_BASE_URL=https://<api-cloud-run-url>
+NEXT_PUBLIC_API_DATA_MODE=production
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Infra-aligned local env
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+After Terraform apply:
 
-## Deploy on Vercel
+```powershell
+./infra/scripts/sync-local-env.ps1 -WriteWebEnv
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Generated:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `apps/web/.env.infra.local`
+
+This file includes:
+
+- `KIMEBOARD_API_BASE_URL`
+- `NEXT_PUBLIC_API_DATA_MODE=production`

@@ -1,0 +1,10 @@
+{
+  "projectId": "demo-kimeboard",
+  "devAuthBypass": {
+    "uid": "dev-user",
+    "email": "dev@local"
+  },
+  "cloudTasks": {
+    "location": "asia-northeast1"
+  }
+}

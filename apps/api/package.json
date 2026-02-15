@@ -4,18 +4,20 @@
   "type": "module",
   "scripts": {
     "dev": "next dev -p 3001",
-    "dev:demo": "cross-env FIRESTORE_PROJECT_ID=demo-kimeboard FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 DISABLE_CLOUD_TASKS=true next dev -p 3001",
+    "dev:demo": "concurrently \"npm:demo:db\" \"npm:dev:demo:api\"",
+    "dev:demo:api": "cross-env FIRESTORE_PROJECT_ID=demo-kimeboard FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 DISABLE_CLOUD_TASKS=true next dev -p 3001",
     "build": "next build",
     "start": "next start -p ${PORT:-3000}",
     "lint": "echo \"(optional)\"",
     "typecheck": "tsc -p tsconfig.json --noEmit --incremental false",
-    "demo:db": "firebase emulators:start --only firestore --project demo-kimeboard",
+    "demo:db": "firebase emulators:start --only firestore,auth --project demo-kimeboard --config ../../infra/firestore/firebase.json",
     "demo:seed": "cross-env FIRESTORE_PROJECT_ID=demo-kimeboard FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 tsx scripts/seed-demo.ts",
-    "demo": "concurrently \"npm:demo:db\" \"npm:dev:demo\""
+    "demo": "npm run dev:demo"
   },
   "dependencies": {
     "@google-cloud/firestore": "^7.11.0",
     "@google-cloud/tasks": "^6.2.0",
+    "firebase-admin": "^13.6.1",
     "next": "^15.1.0",
     "zod": "^3.24.1"
   },

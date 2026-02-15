@@ -50,6 +50,7 @@
 - **Backend API**: Next.js Route Handlers, TypeScript
 - **Agent**: Python, FastAPI (uvicorn)
 - **Database**: Firestore
+- **Auth**: Firebase Authentication（メール/パスワード、将来 Google ログイン対応）
 - **Infrastructure**: GCP (Cloud Run, Cloud Tasks, Firestore)
 - **IaC**: Terraform
 
@@ -137,6 +138,7 @@ uvicorn src.server:app --reload --port 8081
 - **Agent 仕様**: [`specs/core/agent.yaml`](specs/core/agent.yaml)
 - **インフラ仕様**: [`specs/core/infra.yaml`](specs/core/infra.yaml)
 - **仕様↔実装対応**: [`specs/core/spec-impl-map.yaml`](specs/core/spec-impl-map.yaml)
+- **認証仕様**: [`specs/core/auth.md`](specs/core/auth.md)
 
 ### アーキテクチャドキュメント
 
@@ -181,6 +183,19 @@ terraform apply
 2. API が Cloud Tasks で Agent (draft_actions_skill) を起動
 3. Agent が Decision からアクション素案を生成
 4. API が Action を一括作成
+
+## リリース・ログイン情報
+
+リリース環境のログイン情報は [Zenn](https://zenn.dev/higaso_oss) にて公開しています。
+
+### デモ用ログイン
+
+| 項目 | 値 |
+|------|-----|
+| メール | `demo@kimeboard.dev` |
+| パスワード | `Demo1234!` |
+
+※ Firebase プロジェクトで事前にこのアカウントを登録してください。
 
 ## ライセンス
 

@@ -1,10 +1,17 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { Search, PencilLine, Save, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { projects as seedProjects, type Project } from "@/lib/mock/data";
+import {
+  decisionStatusLabels,
+  projectCreationDefaults,
+  type Project,
+} from "@/lib/mock/data";
+import { useDemoProjects } from "@/lib/hooks/use-demo-api";
+import { createDemoProject, patchDemoProject } from "@/lib/api/demo";
+import { useAuth } from "@/contexts/auth-context";
 import { ROUTES } from "@/lib/routes";
 import { formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,13 +22,19 @@ import { Textarea } from "@/components/ui/textarea";
 
 export default function ProjectsPage() {
   const router = useRouter();
-  const [items, setItems] = useState<Project[]>(seedProjects);
+  const { projects, loading, error, refresh } = useDemoProjects();
+  const { user, signOut, getIdToken } = useAuth();
+  const [items, setItems] = useState<Project[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [query, setQuery] = useState("");
   const [openModal, setOpenModal] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
+
+  useEffect(() => {
+    setItems(projects);
+  }, [projects]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim();
@@ -40,29 +53,40 @@ export default function ProjectsPage() {
     );
   }
 
-  function createProject() {
+  async function saveProject(projectId: string, project: Project) {
+    try {
+      await patchDemoProject(projectId, {
+        name: project.name,
+        description: project.description,
+      }, getIdToken);
+      await refresh();
+      setEditingId(null);
+      setNotice(`${project.name} を保存しました`);
+    } catch (e) {
+      setNotice(`保存に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function createProject() {
     if (!newName.trim()) return;
 
-    const projectId = `prj_${String(items.length + 1).padStart(2, "0")}`;
-    const newProject: Project = {
-      projectId,
-      name: newName,
-      description: newDescription || "新規プロジェクト",
-      undecided: 0,
-      ready: 0,
-      overdue: 0,
-      missingOwner: 0,
-      nextMeetingAt: "2026-02-14T10:00:00+09:00",
-    };
-
-    setItems((prev) => [newProject, ...prev]);
-    setOpenModal(false);
-    setNewName("");
-    setNewDescription("");
-    setNotice(`プロジェクト「${newProject.name}」を作成しました`);
-    setTimeout(() => {
+    try {
+      const { projectId } = await createDemoProject(
+        {
+          name: newName,
+          description: newDescription || projectCreationDefaults.description,
+        },
+        getIdToken,
+      );
+      await refresh();
+      setOpenModal(false);
+      setNewName("");
+      setNewDescription("");
+      setNotice(`プロジェクト「${newName}」を作成しました`);
       router.push(ROUTES.projectHome(projectId));
-    }, 500);
+    } catch (e) {
+      setNotice(`作成に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   return (
@@ -94,6 +118,30 @@ export default function ProjectsPage() {
             {notice}
           </p>
         ) : null}
+        {error ? (
+          <p className="mb-4 rounded-[10px] border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            プロジェクト取得に失敗しました: {error}
+          </p>
+        ) : null}
+        {loading && items.length === 0 ? (
+          <p className="mb-4 text-sm text-neutral-500">プロジェクトを読み込み中...</p>
+        ) : null}
+        <Card className="mb-4 flex items-center justify-between">
+          <div>
+            <CardDescription>ユーザーメニュー</CardDescription>
+            <CardTitle className="mt-1 text-base">
+              {user?.displayName?.trim() || "名前未設定"}
+            </CardTitle>
+            <p className="text-xs text-neutral-500">{user?.email ?? "メール未設定"}</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => signOut().then(() => router.push(ROUTES.login))}
+          >
+            ログアウト
+          </Button>
+        </Card>
 
         <section className="grid grid-cols-3 gap-6">
           {filtered.map((project) => {
@@ -115,10 +163,7 @@ export default function ProjectsPage() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => {
-                        setEditingId(null);
-                        setNotice(`${project.name} を保存しました（モック）`);
-                      }}
+                      onClick={() => saveProject(project.projectId, project)}
                     >
                       <Save className="mr-1 size-3" />
                       保存
@@ -153,7 +198,7 @@ export default function ProjectsPage() {
 
                 <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
                   <Metric label="未決決裁" value={project.undecided} />
-                  <Metric label="READY_TO_DECIDE" value={project.ready} />
+                  <Metric label={decisionStatusLabels.READY_TO_DECIDE} value={project.ready} />
                   <Metric label="期限超過アクション" value={project.overdue} />
                   <Metric label="決裁者未設定" value={project.missingOwner} />
                 </div>

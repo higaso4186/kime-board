@@ -1,18 +1,32 @@
-import { redirect } from "next/navigation";
-import { getProjectMeetings } from "@/lib/mock/data";
+"use client";
+
+import { useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { Card, CardTitle } from "@/components/ui/card";
+import { useDemoProjectSnapshot } from "@/lib/hooks/use-demo-api";
 import { ROUTES } from "@/lib/routes";
 
-export default async function AgendaIndexPage({
-  params,
-}: {
-  params: Promise<{ projectId: string }>;
-}) {
-  const { projectId } = await params;
-  const nextMeeting = getProjectMeetings(projectId)[0];
+export default function AgendaIndexPage() {
+  const params = useParams<{ projectId: string }>();
+  const router = useRouter();
+  const projectId = Array.isArray(params.projectId)
+    ? params.projectId[0]
+    : params.projectId;
+  const { snapshot, loading } = useDemoProjectSnapshot(projectId);
 
-  if (nextMeeting) {
-    redirect(ROUTES.meetingAgenda(projectId, nextMeeting.meetingId));
-  }
+  useEffect(() => {
+    if (loading) return;
+    const nextMeeting = snapshot?.meetings[0];
+    if (nextMeeting) {
+      router.replace(ROUTES.meetingAgenda(projectId, nextMeeting.meetingId));
+      return;
+    }
+    router.replace(ROUTES.meetings(projectId));
+  }, [loading, projectId, router, snapshot]);
 
-  redirect(ROUTES.meetings(projectId));
+  return (
+    <Card>
+      <CardTitle>遷移中...</CardTitle>
+    </Card>
+  );
 }

@@ -1,4 +1,5 @@
-﻿import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { membersDefaults } from "@/lib/mock/data";
 
 export default function MembersPage() {
   return (
@@ -9,12 +10,13 @@ export default function MembersPage() {
         <p className="font-medium">名前</p>
         <p className="font-medium">ロール</p>
         <p className="font-medium">状態</p>
-        <p>本部長 佐藤</p>
-        <p>決裁者</p>
-        <p>有効</p>
-        <p>PM 高橋</p>
-        <p>編集者</p>
-        <p>有効</p>
+        {membersDefaults.map((member) => (
+          <div key={member.name} className="contents">
+            <p>{member.name}</p>
+            <p>{member.role}</p>
+            <p>{member.status}</p>
+          </div>
+        ))}
       </div>
     </Card>
   );

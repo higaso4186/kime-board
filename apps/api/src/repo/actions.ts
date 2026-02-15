@@ -11,6 +11,7 @@ const makeAction = (projectId: string, decisionId: string, payload: any) =>
     type: payload.type,
     title: payload.title,
     description: payload.description,
+    note: payload.note,
     assignee: payload.assignee,
     dueAt: payload.dueAt,
     status: payload.status ?? "TODO",
@@ -41,4 +42,11 @@ export const bulkCreateActions = async (projectId: string, decisionId: string, a
 export const listActionsByDecision = async (projectId: string, decisionId: string) => {
   const snap = await refs.actions(projectId, decisionId).orderBy("createdAt", "asc").get();
   return snap.docs.map((d) => Action.parse(d.data()));
+};
+
+export const listActionsByProject = async (projectId: string) => {
+  const snap = await refs.actionGroup().where("projectId", "==", projectId).get();
+  const actions = snap.docs.map((d) => Action.parse(d.data()));
+  actions.sort((a, b) => Date.parse(a.createdAt ?? "") - Date.parse(b.createdAt ?? ""));
+  return actions;
 };

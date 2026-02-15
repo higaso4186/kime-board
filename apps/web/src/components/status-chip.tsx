@@ -1,4 +1,9 @@
-﻿import { DecisionStatus, MeetingStatus } from "@/lib/mock/data";
+import {
+  decisionStatusLabels,
+  meetingStatusLabels,
+  type DecisionStatus,
+  type MeetingStatus,
+} from "@/lib/mock/data";
 import { Badge } from "@/components/ui/badge";
 
 type Status = DecisionStatus | MeetingStatus;
@@ -17,5 +22,9 @@ const tone: Record<Status, string> = {
 };
 
 export function StatusChip({ status }: { status: Status }) {
-  return <Badge className={tone[status]}>{status}</Badge>;
+  const label =
+    status in decisionStatusLabels
+      ? decisionStatusLabels[status as DecisionStatus]
+      : meetingStatusLabels[status as MeetingStatus];
+  return <Badge className={tone[status]}>{label}</Badge>;
 }

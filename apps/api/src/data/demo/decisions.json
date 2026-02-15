@@ -1,0 +1,118 @@
+[
+  {
+    "decisionId": "dcs_01",
+    "projectId": "prj_01",
+    "title": "見積テンプレートを3種に統一する",
+    "summary": "見積入力の揺れを減らし、承認時間を短縮する。",
+    "tag": "運用",
+    "status": "NEEDS_INFO",
+    "owner": "",
+    "dueAt": "2026-02-15T18:00:00+09:00",
+    "meetingTitle": "週次PJ定例 2/8",
+    "options": [
+      {
+        "id": "opt_01",
+        "label": "全社共通テンプレートに統一",
+        "merit": "入力揺れを大幅に削減できる",
+        "demerit": "例外案件の記入負荷が増える",
+        "note": "例外申請フローの併設が前提"
+      },
+      {
+        "id": "opt_02",
+        "label": "部門別テンプレートを維持",
+        "merit": "現場運用への影響が小さい",
+        "demerit": "集計指標の比較が難しい",
+        "note": "短期運用コストは低い"
+      }
+    ],
+    "priority": "高",
+    "readiness": 58
+  },
+  {
+    "decisionId": "dcs_02",
+    "projectId": "prj_01",
+    "title": "インサイドセールスのKPI定義を改訂",
+    "summary": "商談化率の定義を一本化し、現場判断の差異を抑える。",
+    "tag": "組織",
+    "status": "READY_TO_DECIDE",
+    "owner": "本部長 佐藤",
+    "dueAt": "2026-02-13T18:00:00+09:00",
+    "meetingTitle": "週次PJ定例 2/8",
+    "options": [
+      {
+        "id": "opt_01",
+        "label": "KPIを商談化率中心に改訂",
+        "merit": "営業現場の行動指標に直結する",
+        "demerit": "短期で数字がぶれやすい",
+        "note": "3か月で再評価する"
+      },
+      {
+        "id": "opt_02",
+        "label": "現行KPIを維持",
+        "merit": "既存運用の変更が不要",
+        "demerit": "改善の遅れが継続する",
+        "note": "再設計コストを先送りする形"
+      }
+    ],
+    "priority": "中",
+    "readiness": 88
+  },
+  {
+    "decisionId": "dcs_03",
+    "projectId": "prj_01",
+    "title": "顧客スコア算出ロジックをv2へ移行",
+    "summary": "過去6か月データでスコア精度を改善し優先度を再計算する。",
+    "tag": "技術",
+    "status": "DECIDED",
+    "owner": "PM 高橋",
+    "dueAt": "2026-02-20T18:00:00+09:00",
+    "meetingTitle": "ステアリング委員会",
+    "options": [
+      {
+        "id": "opt_01",
+        "label": "v2を全顧客へ適用",
+        "merit": "スコア精度が最大化される",
+        "demerit": "監視体制の負荷が増える",
+        "note": "監視閾値の再調整が必要"
+      },
+      {
+        "id": "opt_02",
+        "label": "高優先顧客のみv2適用",
+        "merit": "段階移行でリスクを抑えられる",
+        "demerit": "運用が複雑化する",
+        "note": "四半期内に全体適用可否を判断"
+      }
+    ],
+    "priority": "中",
+    "readiness": 100
+  },
+  {
+    "decisionId": "dcs_04",
+    "projectId": "prj_01",
+    "title": "オンボーディング研修の必修化範囲",
+    "summary": "職種別に必修範囲を再定義し、離職率の上昇を抑える。",
+    "tag": "人材",
+    "status": "REOPEN",
+    "owner": "人事 伊藤",
+    "dueAt": "2026-02-18T18:00:00+09:00",
+    "meetingTitle": "臨時課題整理",
+    "options": [
+      {
+        "id": "opt_01",
+        "label": "全職種を必修対象にする",
+        "merit": "教育品質を均一化しやすい",
+        "demerit": "受講工数が大きい",
+        "note": "繁忙期の受講調整が必要"
+      },
+      {
+        "id": "opt_02",
+        "label": "営業・CSのみ必修化",
+        "merit": "優先部署へ集中投資できる",
+        "demerit": "部署間で習熟度差が生じる",
+        "note": "半年後に対象拡大を再検討"
+      }
+    ],
+    "priority": "低",
+    "readiness": 72
+  }
+]

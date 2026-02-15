@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Sans_JP } from "next/font/google";
 import { PaletteRuntime } from "@/components/theme/palette-runtime";
+import { AuthProvider } from "@/contexts/auth-context";
+import { AuthGuard } from "@/components/auth/auth-guard";
 import "./globals.css";
 
 const inter = Inter({
@@ -35,7 +37,9 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`${inter.variable} ${notoSansJp.variable} font-sans antialiased`}>
         <PaletteRuntime />
-        {children}
+        <AuthProvider>
+          <AuthGuard>{children}</AuthGuard>
+        </AuthProvider>
       </body>
     </html>
   );
