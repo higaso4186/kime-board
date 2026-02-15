@@ -1,0 +1,6 @@
+{
+  "authEmulatorUrl": "http://127.0.0.1:9099",
+  "emulatorApiKey": "demo-key",
+  "emulatorAuthDomain": "localhost",
+  "emulatorProjectId": "demo-kimeboard"
+}

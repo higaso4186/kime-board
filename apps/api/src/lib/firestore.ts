@@ -1,6 +1,10 @@
 import { Firestore } from "@google-cloud/firestore";
+import runtimeDefaults from "@/data/config/runtime-defaults.json";
 
-const projectId = process.env.FIRESTORE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || "demo-kimeboard";
+const projectId =
+  process.env.FIRESTORE_PROJECT_ID ||
+  process.env.GOOGLE_CLOUD_PROJECT ||
+  runtimeDefaults.projectId;
 
 export const db = new Firestore({
   projectId,

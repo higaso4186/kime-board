@@ -2,7 +2,7 @@ param(
   [ValidateSet("init", "plan", "apply", "destroy")]
   [string]$Action = "plan",
 
-  [ValidateSet("foundation", "db", "adk", "cloudrun", "all")]
+  [ValidateSet("foundation", "db", "adk", "cloudrun", "services", "all")]
   [string]$Component = "all",
 
   [Parameter(Mandatory = $false)]
@@ -14,15 +14,12 @@ param(
   [string]$ApiBaseUrl = "",
 
   [switch]$EnableCloudRun,
-  [switch]$DeployFirestoreArtifacts
+  [switch]$DeployFirestoreArtifacts,
+  [switch]$SyncLocalEnv
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-
-if ([string]::IsNullOrWhiteSpace($ProjectId)) {
-  throw "ProjectId is required. Pass -ProjectId or set GCP_PROJECT_ID."
-}
 
 function Assert-Command {
   param([string]$Name)
@@ -39,10 +36,42 @@ function Invoke-Terraform {
   }
 }
 
+function Import-EnvFile {
+  param([string]$Path)
+  if (-not (Test-Path $Path)) {
+    return
+  }
+  Get-Content -Path $Path | ForEach-Object {
+    $line = $_.Trim()
+    if ([string]::IsNullOrWhiteSpace($line)) { return }
+    if ($line.StartsWith("#")) { return }
+    $parts = $line -split "=", 2
+    if ($parts.Count -ne 2) { return }
+    $name = $parts[0].Trim()
+    $value = $parts[1].Trim()
+    if ($value.StartsWith('"') -and $value.EndsWith('"')) {
+      $value = $value.Substring(1, $value.Length - 2)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($name)) {
+      Set-Item -Path "Env:$name" -Value $value
+    }
+  }
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $infraDir = Split-Path -Parent $scriptDir
 $terraformDir = Join-Path $infraDir "terraform"
 $firestoreDir = Join-Path $infraDir "firestore"
+
+Import-EnvFile -Path (Join-Path $infraDir ".env.infra")
+
+if ([string]::IsNullOrWhiteSpace($ProjectId)) { $ProjectId = $env:GCP_PROJECT_ID }
+if ([string]::IsNullOrWhiteSpace($ApexDomain)) { $ApexDomain = $env:APEX_DOMAIN }
+if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) { $ApiBaseUrl = $env:API_BASE_URL }
+
+if ([string]::IsNullOrWhiteSpace($ProjectId)) {
+  throw "ProjectId is required. Pass -ProjectId or set GCP_PROJECT_ID."
+}
 
 Assert-Command -Name "terraform"
 
@@ -74,6 +103,13 @@ switch ($Component) {
     }
     $targets += "-target=module.cloud_run[0]"
   }
+  "services" {
+    if (-not $EnableCloudRun.IsPresent) {
+      throw "Component 'services' requires -EnableCloudRun."
+    }
+    $targets += "-target=module.foundation"
+    $targets += "-target=module.cloud_run[0]"
+  }
   "all" { }
 }
 
@@ -91,6 +127,7 @@ switch ($Action) {
     Invoke-Terraform -Args (@("plan") + $baseArgs)
   }
   "apply" {
+    Write-Warning "Apply will change live resources. Review terraform plan output before running apply."
     Write-Host "Running terraform apply ($Component)..."
     Invoke-Terraform -Args (@("apply", "-auto-approve") + $baseArgs)
 
@@ -104,6 +141,18 @@ switch ($Action) {
         }
       } else {
         Write-Warning "firebase command not found. Skipped Firestore artifacts deploy."
+      }
+    }
+
+    if ($SyncLocalEnv.IsPresent) {
+      $syncScript = Join-Path $scriptDir "sync-local-env.ps1"
+      if (-not (Test-Path $syncScript)) {
+        throw "Sync script not found: $syncScript"
+      }
+      Write-Host "Generating local env files from Terraform outputs..."
+      & $syncScript -Environment $Environment
+      if ($LASTEXITCODE -ne 0) {
+        throw "sync-local-env.ps1 failed."
       }
     }
   }

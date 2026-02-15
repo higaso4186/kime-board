@@ -7,8 +7,9 @@
 - Node.js 20+
 - npm 10+
 - Python 3.11+
-- Java 17+（Firestore Emulator 用）
-- 利用ポートが空いていること: `3000`, `3001`, `4000`, `8080`, `8081`
+- Java 17+（Firebase Emulator 用。Firestore / Emulator UI に必要）
+- 利用ポートが空いていること: `3000`, `3001`, `4000`, `8080`, `8081`, `9099`（Auth Emulator）  
+- **Java 17+**（Firebase Emulator 用。未導入時は [Adoptium](https://adoptium.net/) 等でインストール。Java なしで開発する場合は認証スキップ `DISABLE_AUTH` を利用）
 
 ## 1. 依存関係のインストール
 
@@ -40,6 +41,49 @@ AGENT_CALLBACK_TOKEN=change-me
 
 `apps/api/.env.example` をコピーして作成し、最低限上記値を設定してください。
 
+**Auth Emulator を利用する場合**（`demo:db` で firestore,auth を起動時、`dev:demo` に FIREBASE_AUTH_EMULATOR_HOST が含まれる）:
+
+```dotenv
+FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099
+```
+
+**認証をスキップする場合**:
+
+```dotenv
+DISABLE_AUTH=true
+```
+
+### Web (`apps/web/.env.local`)
+
+**認証を有効にする場合**（Firebase プロジェクトが必要）:
+
+```dotenv
+NEXT_PUBLIC_FIREBASE_API_KEY=xxx
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=xxx.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=xxx
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=xxx.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=xxx
+NEXT_PUBLIC_FIREBASE_APP_ID=xxx
+KIMEBOARD_API_BASE_URL=http://localhost:3001
+```
+
+**Auth Emulator を利用する場合**（API の `demo:db` で firestore,auth 起動時）:
+
+```dotenv
+NEXT_PUBLIC_FIREBASE_USE_EMULATOR=true
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-kimeboard
+KIMEBOARD_API_BASE_URL=http://localhost:3001
+```
+
+**認証をスキップする場合**（API に `DISABLE_AUTH=true` を設定した上で）:
+
+```dotenv
+NEXT_PUBLIC_DISABLE_AUTH=true
+KIMEBOARD_API_BASE_URL=http://localhost:3001
+```
+
+`apps/web/.env.local.example` を参考に作成してください。
+
 ### Agent (`apps/agent/.env`)
 
 ```dotenv
@@ -51,30 +95,26 @@ TASK_AUTH_MODE=NONE
 
 `apps/agent/.env.example` をコピーして作成し、`AGENT_CALLBACK_TOKEN` を API と同じ値にしてください。
 
-## 3. 起動手順（推奨: 4ターミナル）
+## 3. 起動手順（推奨: 3ターミナル）
 
-### Terminal A: Firestore Emulator
-
-```powershell
-cd apps/api
-npm run demo:db
-```
-
-### Terminal B: API
+### Terminal A: API + Emulators（Firestore + Auth 込み）
 
 ```powershell
 cd apps/api
 npm run dev:demo
 ```
 
-### Terminal C: Agent
+Firestore (8080)、Auth (9099)、Next.js API (3001) が同時に起動。Emulator UI: `http://127.0.0.1:4000`。  
+※ Java 17+ が必要。未インストールの場合は [Adoptium](https://adoptium.net/) 等でインストール。
+
+### Terminal B: Agent
 
 ```powershell
 cd apps/agent
 .\.venv\Scripts\uvicorn src.server:app --reload --port 8081
 ```
 
-### Terminal D: Web
+### Terminal C: Web
 
 ```powershell
 cd apps/web
@@ -119,7 +159,10 @@ Invoke-RestMethod -Method Post `
 
 ## 6. 画面確認
 
-- Web: `http://localhost:3000/projects`
+- Web: `http://localhost:3000/projects`（認証スキップ時は直接アクセス可）
+- 認証有効時: 未ログインなら `/login` にリダイレクト、サインアップ/ログイン後に `/projects` へ
+
+認証の詳細は [`specs/core/auth.md`](../../specs/core/auth.md) を参照してください。
 - API: `http://localhost:3001`
 - Firestore Emulator UI: `http://127.0.0.1:4000`
 
@@ -143,4 +186,45 @@ npm run build
 # Agent
 cd ../agent
 .\.venv\Scripts\pytest
+```
+
+## Infra-aligned local test (Cloud Run + local process)
+
+After `infra` deploy with Cloud Run enabled, generate local env templates from Terraform outputs:
+
+```powershell
+./infra/scripts/sync-local-env.ps1
+```
+
+Generated files:
+
+- `apps/api/.env.infra.local`
+- `apps/agent/.env.infra.local`
+
+Use these values in local `.env` before starting API/Agent if you want local processes to use deployed infra settings.
+
+## Web/API mode alignment (important)
+
+To run UI against real API data (not demo JSON), set:
+
+```dotenv
+KIMEBOARD_API_BASE_URL=<your-api-url>
+NEXT_PUBLIC_API_DATA_MODE=production
+```
+
+When `NEXT_PUBLIC_API_DATA_MODE=production`, web loads:
+
+- `GET /api/projects`
+- `GET /api/projects/:projectId/snapshot`
+
+When `NEXT_PUBLIC_API_DATA_MODE=demo`, web loads:
+
+- `GET /api/demo/projects`
+- `GET /api/demo/projects/:projectId/snapshot`
+
+Recommended command after infra apply:
+
+```powershell
+./infra/scripts/sync-local-env.ps1 -WriteWebEnv
+./infra/scripts/verify-agent-api-connection.ps1
 ```

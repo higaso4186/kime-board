@@ -1,0 +1,32 @@
+[
+  {
+    "projectId": "prj_01",
+    "name": "営業DX刷新",
+    "description": "商談情報の一元化と週次決裁サイクルの短縮",
+    "undecided": 24,
+    "ready": 7,
+    "overdue": 3,
+    "missingOwner": 5,
+    "nextMeetingAt": "2026-02-10T10:00:00+09:00"
+  },
+  {
+    "projectId": "prj_02",
+    "name": "採用広報Q2",
+    "description": "採用チャネル配分とメッセージ戦略",
+    "undecided": 11,
+    "ready": 4,
+    "overdue": 2,
+    "missingOwner": 2,
+    "nextMeetingAt": "2026-02-11T15:00:00+09:00"
+  },
+  {
+    "projectId": "prj_03",
+    "name": "CS運用改善",
+    "description": "一次応答 SLA とナレッジ更新フロー整備",
+    "undecided": 9,
+    "ready": 3,
+    "overdue": 1,
+    "missingOwner": 1,
+    "nextMeetingAt": "2026-02-12T11:00:00+09:00"
+  }
+]

@@ -12,6 +12,10 @@ locals {
   }
 }
 
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
 resource "google_cloud_run_v2_service" "agent" {
   name     = var.agent_service_name
   location = var.region
@@ -51,6 +55,16 @@ resource "google_cloud_run_v2_service" "agent" {
       env {
         name  = "API_AUDIENCE"
         value = local.api_url
+      }
+
+      env {
+        name  = "TASK_AUTH_MODE"
+        value = "OIDC"
+      }
+
+      env {
+        name  = "TASK_OIDC_AUDIENCE"
+        value = local.agent_url
       }
 
       env {
@@ -115,6 +129,21 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "CLOUD_TASKS_QUEUE"
         value = var.cloud_tasks_queue
+      }
+
+      env {
+        name  = "CLOUD_TASKS_LOCATION"
+        value = var.region
+      }
+
+      env {
+        name  = "TASK_OIDC_SERVICE_ACCOUNT_EMAIL"
+        value = var.service_account_emails[var.api_service_account_id]
+      }
+
+      env {
+        name  = "AGENT_TASK_OIDC_AUDIENCE"
+        value = local.agent_url
       }
 
       env {
@@ -226,4 +255,10 @@ resource "google_cloud_run_v2_service_iam_member" "agent_invokers" {
   project  = var.project_id
   role     = "roles/run.invoker"
   member   = each.value
+}
+
+resource "google_service_account_iam_member" "api_sa_cloudtasks_act_as" {
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${var.service_account_emails[var.api_service_account_id]}"
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com"
 }

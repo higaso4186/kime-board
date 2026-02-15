@@ -6,6 +6,7 @@ export const CreateActionRequest = z.object({
   type: ActionType,
   title: z.string().min(1),
   description: z.string().optional(),
+  note: z.string().optional(),
   assignee: ActionAssignee.optional(),
   dueAt: z.string().datetime().optional(),
 });

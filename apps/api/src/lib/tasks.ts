@@ -1,5 +1,6 @@
 import { CloudTasksClient } from "@google-cloud/tasks";
 import { requireParam } from "./http";
+import runtimeDefaults from "@/data/config/runtime-defaults.json";
 
 export type TaskKind = "meeting_structurer" | "reply_integrator" | "draft_actions_skill";
 
@@ -23,12 +24,16 @@ export const enqueueJsonTask = async (kind: TaskKind, payload: Record<string, un
   }
 
   const queue = requireParam(process.env.CLOUD_TASKS_QUEUE, "CLOUD_TASKS_QUEUE");
-  const location = process.env.CLOUD_TASKS_LOCATION || process.env.GCP_REGION || "asia-northeast1";
+  const location =
+    process.env.CLOUD_TASKS_LOCATION ||
+    process.env.GCP_REGION ||
+    runtimeDefaults.cloudTasks.location;
   const project = requireParam(
     process.env.GOOGLE_CLOUD_PROJECT || process.env.FIRESTORE_PROJECT_ID,
     "GOOGLE_CLOUD_PROJECT"
   );
   const url = getUrl(kind);
+  const audience = process.env.AGENT_TASK_OIDC_AUDIENCE || url;
   const serviceAccountEmail = requireParam(
     process.env.TASK_OIDC_SERVICE_ACCOUNT_EMAIL,
     "TASK_OIDC_SERVICE_ACCOUNT_EMAIL"
@@ -48,7 +53,7 @@ export const enqueueJsonTask = async (kind: TaskKind, payload: Record<string, un
         body,
         oidcToken: {
           serviceAccountEmail,
-          audience: url,
+          audience,
         },
       },
     },

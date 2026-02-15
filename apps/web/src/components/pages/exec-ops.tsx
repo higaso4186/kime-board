@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useState } from "react";
 import { OpenRightPanelButton } from "@/components/layout/open-right-panel-button";
 import { Button } from "@/components/ui/button";
-import { getProjectMeetings } from "@/lib/mock/data";
+import { useDemoProjectSnapshot } from "@/lib/hooks/use-demo-api";
 import { ROUTES } from "@/lib/routes";
 
 export function ExecOps({ projectId }: { projectId: string }) {
   const [notice, setNotice] = useState("");
-  const nextMeeting = getProjectMeetings(projectId)[0];
+  const { snapshot } = useDemoProjectSnapshot(projectId);
+  const nextMeeting = snapshot?.meetings[0];
 
   return (
     <div className="space-y-2">

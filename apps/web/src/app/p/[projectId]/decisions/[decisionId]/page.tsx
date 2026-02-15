@@ -1,107 +1,131 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
-import { OpenRightPanelButton } from "@/components/layout/open-right-panel-button";
-import { StatusChip } from "@/components/status-chip";
+import { MessageSquare, PencilLine } from "lucide-react";
+import { useRightPanel } from "@/components/layout/project-shell";
+import { BackButton } from "@/components/ui/back-button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Radio } from "@/components/ui/radio";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
-import { BackButton } from "@/components/ui/back-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { StatusChip } from "@/components/status-chip";
 import {
-  getDecision,
-  getDecisionActions,
-  getDecisionQuestions,
+  actionStatusLabels,
+  actionStatusOrder,
+  decisionDetailDefaults,
+  decisionStatusLabels,
+  decisionStatusOrder,
   getMissingFieldLabel,
-  getProjectDecisions,
   type Action,
-  type ActionStatus,
-  type Decision,
+  type DecisionOption,
   type DecisionStatus,
 } from "@/lib/mock/data";
+import {
+  patchDemoDecision,
+} from "@/lib/api/demo";
+import { useDemoProjectSnapshot } from "@/lib/hooks/use-demo-api";
+import { useAuth } from "@/contexts/auth-context";
 import { ROUTES } from "@/lib/routes";
 
-const decisionStatuses: DecisionStatus[] = [
-  "NEEDS_INFO",
-  "READY_TO_DECIDE",
-  "DECIDED",
-  "REOPEN",
-];
-const actionStatuses: ActionStatus[] = ["TODO", "DOING", "DONE", "BLOCKED"];
 type OptionSelectMode = "SINGLE" | "HYBRID";
-type DecisionOption = { id: string; label: string };
+type ActionOutcome = "CLOSE_DECISION" | "NEXT_DECISION";
 
 export default function DecisionDetailPage() {
   const params = useParams<{ projectId: string; decisionId: string }>();
-  const projectId = Array.isArray(params.projectId)
-    ? params.projectId[0]
-    : params.projectId;
-  const decisionId = Array.isArray(params.decisionId)
-    ? params.decisionId[0]
-    : params.decisionId;
+  const projectId = Array.isArray(params.projectId) ? params.projectId[0] : params.projectId;
+  const decisionId = Array.isArray(params.decisionId) ? params.decisionId[0] : params.decisionId;
 
-  const baseDecision = getDecision(projectId, decisionId);
-  const fallbackDecision = getProjectDecisions(projectId)[0];
-  const decision: Decision | null = baseDecision ?? fallbackDecision ?? null;
+  const { snapshot, loading, error, refresh } = useDemoProjectSnapshot(projectId);
+  const { getIdToken } = useAuth();
+  const { openChatForQuestion } = useRightPanel();
+  const decision = snapshot?.decisions.find((item) => item.decisionId === decisionId) ?? null;
 
-  const [title, setTitle] = useState(decision?.title ?? "");
-  const [tag, setTag] = useState(decision?.tag ?? "");
-  const [status, setStatus] = useState<DecisionStatus>(decision?.status ?? "NEEDS_INFO");
-  const [owner, setOwner] = useState(decision?.owner ?? "");
-  const [dueAt, setDueAt] = useState(
-    decision?.dueAt ? decision.dueAt.slice(0, 16) : "",
-  );
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [statusDraft, setStatusDraft] = useState<DecisionStatus | null>(null);
+  const [ownerDraft, setOwnerDraft] = useState<string | null>(null);
+  const [dueAtDraft, setDueAtDraft] = useState<string | null>(null);
   const [optionMode, setOptionMode] = useState<OptionSelectMode>("SINGLE");
-  const [options, setOptions] = useState<DecisionOption[]>([
-    { id: "opt_01", label: "全社共通の標準テンプレートへ統一" },
-    { id: "opt_02", label: "部門ごとに2テンプレートを維持" },
-    { id: "opt_03", label: "現行のまま運用を継続" },
-  ]);
-  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>(["opt_01"]);
-  const [decisionConclusion, setDecisionConclusion] = useState(
-    "採用理由と、複合案の場合の適用条件を記載します。",
+  const [options, setOptions] = useState<DecisionOption[]>(
+    decisionDetailDefaults.options.map((option) => ({
+      ...option,
+      merit: option.merit ?? "",
+      demerit: option.demerit ?? "",
+      note: option.note ?? "",
+    })),
   );
-  const [prosCons, setProsCons] = useState(
-    "賛成: 入力揺れ削減 / 反対: 例外対応コスト増 / 条件: 2週間の試験運用",
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>(
+    decisionDetailDefaults.selectedOptionIds,
   );
-  const [assumptions, setAssumptions] = useState(
-    "営業部のテンプレート運用ルールが週次で共有されること。",
-  );
-  const [reopenTrigger, setReopenTrigger] = useState(
-    "商談登録率が導入前比で5%以上低下した場合。",
-  );
-  const [notice, setNotice] = useState("");
+  const [decisionConclusion, setDecisionConclusion] = useState(decisionDetailDefaults.conclusion);
+  const [assumptions, setAssumptions] = useState(decisionDetailDefaults.assumptions);
+  const [reopenTrigger, setReopenTrigger] = useState(decisionDetailDefaults.reopenTrigger);
+  const [showDeepContext, setShowDeepContext] = useState(false);
   const [activeTab, setActiveTab] = useState<"Prep" | "Exec">("Prep");
+  const [notice, setNotice] = useState("");
+  const [actionStatusOverrides, setActionStatusOverrides] = useState<
+    Record<string, (typeof actionStatusOrder)[number]>
+  >({});
+  const [actionOutcomeOverrides, setActionOutcomeOverrides] = useState<
+    Record<string, ActionOutcome>
+  >({});
+  const [actionNextDecisionOverrides, setActionNextDecisionOverrides] = useState<
+    Record<string, string>
+  >({});
+  const [actionNoteOverrides, setActionNoteOverrides] = useState<Record<string, string>>({});
+  const [actionAssigneeOverrides, setActionAssigneeOverrides] = useState<Record<string, string>>({});
+  const [actionDueAtOverrides, setActionDueAtOverrides] = useState<Record<string, string>>({});
+  const [actionTitleOverrides, setActionTitleOverrides] = useState<Record<string, string>>({});
+  const [editingActionId, setEditingActionId] = useState<string | null>(null);
+  const [isEditingMeta, setIsEditingMeta] = useState(false);
+  const [editingOptionId, setEditingOptionId] = useState<string | null>(null);
+  const [isEditingConclusion, setIsEditingConclusion] = useState(false);
+  const [isEditingAssumptions, setIsEditingAssumptions] = useState(false);
+  const [isEditingReopenTrigger, setIsEditingReopenTrigger] = useState(false);
+  const [extraActions, setExtraActions] = useState<Action[]>([]);
 
-  const [actions, setActions] = useState<Action[]>(() =>
-    decision ? getDecisionActions(projectId, decision.decisionId) : [],
+  const title = titleDraft ?? decision?.title ?? "";
+  const status = statusDraft ?? decision?.status ?? "NEEDS_INFO";
+  const owner = ownerDraft ?? decision?.owner ?? "";
+  const dueAt = dueAtDraft ?? (decision?.dueAt ? decision.dueAt.slice(0, 16) : "");
+
+  const baseActions =
+    decision && snapshot
+      ? snapshot.actions.filter((item) => item.decisionId === decision.decisionId)
+      : [];
+
+  const actions = [
+    ...baseActions.map((action) => ({
+      ...action,
+      status: actionStatusOverrides[action.actionId] ?? action.status,
+    })),
+    ...extraActions,
+  ];
+
+  const openQuestions = (snapshot?.insufficientQuestions ?? []).filter(
+    (question) => question.decisionId === decision?.decisionId && question.status === "OPEN",
   );
 
-  const openQuestions = getDecisionQuestions(projectId, decision?.decisionId ?? "").filter(
-    (question) => question.status === "OPEN",
-  );
+  const actionList = actions.filter((item) => item.type === activeTab);
 
-  const actionList = useMemo(
-    () => actions.filter((item) => item.type === activeTab),
-    [actions, activeTab],
-  );
-
-  const canDecide = status === "READY_TO_DECIDE";
-  const hasSelectedOption = selectedOptionIds.length > 0;
   const selectedOptionLabels = options
     .filter((option) => selectedOptionIds.includes(option.id))
     .map((option) => option.label);
 
-  function updateActionStatus(actionId: string, nextStatus: ActionStatus) {
-    setActions((prev) =>
-      prev.map((action) =>
-        action.actionId === actionId ? { ...action, status: nextStatus } : action,
-      ),
-    );
+  const visibleActionCount =
+    activeTab === "Prep" ? actionList.length + openQuestions.length : actionList.length;
+  const nextDecisionCandidates = (snapshot?.decisions ?? []).filter(
+    (item) => item.decisionId !== decision?.decisionId,
+  );
+
+  function updateOption(optionId: string, patch: Partial<DecisionOption>) {
+    setOptions((prev) => prev.map((option) => (option.id === optionId ? { ...option, ...patch } : option)));
   }
 
   function toggleOption(optionId: string) {
@@ -109,43 +133,193 @@ export default function DecisionDetailPage() {
       setSelectedOptionIds([optionId]);
       return;
     }
-
     setSelectedOptionIds((prev) =>
-      prev.includes(optionId)
-        ? prev.filter((item) => item !== optionId)
-        : [...prev, optionId],
+      prev.includes(optionId) ? prev.filter((item) => item !== optionId) : [...prev, optionId],
     );
   }
 
   function addOption() {
     const nextId = `opt_${String(options.length + 1).padStart(2, "0")}`;
-    setOptions((prev) => [...prev, { id: nextId, label: "新しい選択肢" }]);
+    setOptions((prev) => [
+      ...prev,
+      {
+        id: nextId,
+        label: decisionDetailDefaults.newOptionLabel,
+        merit: "",
+        demerit: "",
+        note: "",
+      },
+    ]);
+    setEditingOptionId(nextId);
+  }
+
+  function updateActionStatus(actionId: string, nextStatus: (typeof actionStatusOrder)[number]) {
+    setExtraActions((prev) =>
+      prev.map((action) => (action.actionId === actionId ? { ...action, status: nextStatus } : action)),
+    );
+    setActionStatusOverrides((prev) => ({ ...prev, [actionId]: nextStatus }));
+  }
+
+  function getDefaultActionOutcome(action: Action): ActionOutcome {
+    return action.supportsDecisionId ? "NEXT_DECISION" : "CLOSE_DECISION";
+  }
+
+  function getActionOutcome(action: Action): ActionOutcome {
+    return actionOutcomeOverrides[action.actionId] ?? getDefaultActionOutcome(action);
+  }
+
+  function updateActionOutcome(actionId: string, outcome: ActionOutcome) {
+    setActionOutcomeOverrides((prev) => ({ ...prev, [actionId]: outcome }));
+  }
+
+  function getNextDecisionId(action: Action) {
+    return actionNextDecisionOverrides[action.actionId] ?? action.supportsDecisionId ?? "";
+  }
+
+  function updateActionNextDecision(actionId: string, nextDecisionId: string) {
+    setActionNextDecisionOverrides((prev) => ({ ...prev, [actionId]: nextDecisionId }));
+  }
+
+  function getActionNote(action: Action) {
+    return actionNoteOverrides[action.actionId] ?? action.note ?? "";
+  }
+
+  function updateActionNote(actionId: string, note: string) {
+    setExtraActions((prev) =>
+      prev.map((action) => (action.actionId === actionId ? { ...action, note } : action)),
+    );
+    setActionNoteOverrides((prev) => ({ ...prev, [actionId]: note }));
+  }
+
+  function toDatetimeLocalValue(value?: string): string {
+    if (!value) return "";
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      const pad = (num: number) => String(num).padStart(2, "0");
+      const year = parsed.getFullYear();
+      const month = pad(parsed.getMonth() + 1);
+      const day = pad(parsed.getDate());
+      const hours = pad(parsed.getHours());
+      const minutes = pad(parsed.getMinutes());
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+    if (value.includes("T")) return value.slice(0, 16);
+    return "";
+  }
+
+  function formatDueAtLabel(value?: string): string {
+    if (!value) return "（未設定）";
+    return value.replace("T", " ").slice(0, 16);
+  }
+
+  function getActionAssignee(action: Action) {
+    return actionAssigneeOverrides[action.actionId] ?? action.assignee ?? "";
+  }
+
+  function updateActionAssignee(actionId: string, assignee: string) {
+    setExtraActions((prev) =>
+      prev.map((action) => (action.actionId === actionId ? { ...action, assignee } : action)),
+    );
+    setActionAssigneeOverrides((prev) => ({ ...prev, [actionId]: assignee }));
+  }
+
+  function getActionDueAt(action: Action) {
+    const override = actionDueAtOverrides[action.actionId];
+    if (override !== undefined) return override;
+    return toDatetimeLocalValue(action.dueAt);
+  }
+
+  function updateActionDueAt(actionId: string, dueAt: string) {
+    setExtraActions((prev) =>
+      prev.map((action) => (action.actionId === actionId ? { ...action, dueAt: dueAt || undefined } : action)),
+    );
+    setActionDueAtOverrides((prev) => ({ ...prev, [actionId]: dueAt }));
   }
 
   function addAction(type: "Prep" | "Exec") {
     if (!decision) return;
     const nextNumber = actions.length + 1;
-    setActions((prev) => [
+    const nextActionId = `act_local_${nextNumber}`;
+    setExtraActions((prev) => [
       ...prev,
       {
-        actionId: `act_local_${nextNumber}`,
+        actionId: nextActionId,
         decisionId: decision.decisionId,
         projectId,
         title: `${type}アクション ${nextNumber}`,
         type,
         status: "TODO",
+        note: "",
       },
     ]);
+    if (type === "Exec") {
+      setActionOutcomeOverrides((prev) => ({
+        ...prev,
+        [nextActionId]: "CLOSE_DECISION",
+      }));
+    }
     setNotice(`${type} アクションを追加しました`);
+  }
+
+  async function saveDecision() {
+    if (!decision) return;
+    try {
+      await patchDemoDecision(
+        projectId,
+        decision.decisionId,
+        {
+          title: title || decision.title,
+          status: statusDraft ?? decision.status,
+          owner: owner || undefined,
+          dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+        },
+        getIdToken,
+      );
+      await refresh();
+      setTitleDraft(null);
+      setStatusDraft(null);
+      setOwnerDraft(null);
+      setDueAtDraft(null);
+      setNotice("更新内容を保存しました");
+    } catch (e) {
+      setNotice(`更新に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function moveReadyToDecide() {
+    if (!decision) return;
+    try {
+      await patchDemoDecision(projectId, decision.decisionId, { status: "READY_TO_DECIDE" }, getIdToken);
+      await refresh();
+      setStatusDraft("READY_TO_DECIDE");
+      setNotice("ステータスを「議題上げ」に変更しました");
+    } catch (e) {
+      setNotice(`ステータス更新に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <CardTitle>読み込み中</CardTitle>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardTitle>読み込みに失敗しました</CardTitle>
+        <p className="mt-2 text-sm text-red-700">{error}</p>
+      </Card>
+    );
   }
 
   if (!decision) {
     return (
       <Card>
         <CardTitle>決裁が見つかりません</CardTitle>
-        <p className="mt-2 text-sm text-neutral-600">
-          URLが無効です。プロジェクト一覧から選択してください。
-        </p>
+        <p className="mt-2 text-sm text-neutral-600">URLが無効です。プロジェクト一覧から選択してください。</p>
         <Button asChild className="mt-4 w-fit">
           <Link href={ROUTES.projects}>プロジェクト一覧へ</Link>
         </Button>
@@ -154,79 +328,33 @@ export default function DecisionDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <BackButton label="一覧へ戻る" />
-      <Card className="space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 space-y-3">
+    <div className="space-y-4 md:space-y-6">
+      <Card className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 lg:gap-3">
+          <BackButton label="戻る" />
+          <span className="h-4 w-px bg-neutral-200" />
+          {isEditingTitle ? (
             <Input
               value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className="h-11 text-base font-semibold"
+              onChange={(event) => setTitleDraft(event.target.value)}
+              onBlur={() => setIsEditingTitle(false)}
+              onKeyDown={(e) => e.key === "Enter" && setIsEditingTitle(false)}
+              autoFocus
+              className="h-9 flex-1 min-w-0 text-base font-semibold lg:max-w-[50%]"
             />
-            <div className="grid grid-cols-4 gap-2">
-              <Input value={tag} onChange={(event) => setTag(event.target.value)} />
-              <Select
-                value={status}
-                onChange={(event) => {
-                  setStatus(event.target.value as DecisionStatus);
-                  setNotice("状態を更新しました");
-                }}
-                controlSize="md"
-              >
-                {decisionStatuses.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </Select>
-              <Input
-                value={owner}
-                placeholder="決裁者"
-                className={owner ? "" : "border-amber-300 bg-amber-50"}
-                onChange={(event) => setOwner(event.target.value)}
-              />
-              <Input
-                type="datetime-local"
-                value={dueAt}
-                onChange={(event) => setDueAt(event.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge>{tag}</Badge>
-              <StatusChip status={status} />
-              <Badge>決裁者: {owner || "未設定"}</Badge>
-              <Badge>不足質問: {openQuestions.length}件</Badge>
-              <Badge>
-                採用案:{" "}
-                {selectedOptionLabels.length
-                  ? `${optionMode === "HYBRID" ? "複合" : "単一"} / ${selectedOptionLabels.length}件`
-                  : "未設定"}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Button
-              onClick={() =>
-                setNotice(`「${title}」の編集内容を保存しました`)
-              }
-            >
-              保存
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={!canDecide || !hasSelectedOption}
-              onClick={() => {
-                setStatus("DECIDED");
-                setNotice("決裁を確定しました");
-              }}
-            >
-              確定
-            </Button>
-              <Button variant="outline" asChild>
-              <Link href={ROUTES.chat(projectId, decision.decisionId)}>不足質問を開く</Link>
+          ) : (
+            <div className="flex min-w-0 flex-1 items-center gap-2 lg:max-w-[50%]">
+              <p className="truncate text-base font-semibold">{title || "（無題）"}</p>
+              <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setIsEditingTitle(true)}>
+                <PencilLine className="size-4" />
               </Button>
+            </div>
+          )}
+          <div className="ml-auto flex shrink-0 gap-2">
+            <Button size="sm" onClick={() => void saveDecision()}>保存</Button>
+            <Button size="sm" variant="secondary" onClick={() => void moveReadyToDecide()}>
+              議題に上げる
+            </Button>
           </div>
         </div>
         {notice ? (
@@ -236,11 +364,11 @@ export default function DecisionDetailPage() {
         ) : null}
       </Card>
 
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-8 space-y-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12 xl:gap-6">
+        <div className="space-y-4 xl:col-span-8">
           <Card>
-            <CardTitle>選択肢（Options）</CardTitle>
-            <div className="mt-3 flex items-center gap-2">
+            <CardTitle>選択肢（メリット / デメリット / 備考）</CardTitle>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 variant={optionMode === "SINGLE" ? "secondary" : "ghost"}
@@ -249,182 +377,416 @@ export default function DecisionDetailPage() {
                   setSelectedOptionIds((prev) => (prev[0] ? [prev[0]] : []));
                 }}
               >
-                単一案
+                単一選択
               </Button>
               <Button
                 size="sm"
                 variant={optionMode === "HYBRID" ? "secondary" : "ghost"}
                 onClick={() => setOptionMode("HYBRID")}
               >
-                複合案
+                複数選択
               </Button>
-              <p className="text-xs text-neutral-500">
-                {optionMode === "SINGLE"
-                  ? "1つの選択肢を採用します"
-                  : "複数の選択肢を組み合わせて採用します"}
-              </p>
             </div>
-            <div className="mt-3 space-y-2">
-              {options.map((option, index) => (
-                <div
-                  key={option.id}
-                  className="flex items-center gap-2 rounded-[10px] border border-neutral-200 px-2 py-2"
-                >
-                  <input
-                    type={optionMode === "SINGLE" ? "radio" : "checkbox"}
-                    name="decision-option"
-                    checked={selectedOptionIds.includes(option.id)}
-                    onChange={() => toggleOption(option.id)}
-                  />
-                  <Input
-                    value={option.label}
-                    onChange={(event) =>
-                      setOptions((prev) =>
-                        prev.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, label: event.target.value }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
-                  {selectedOptionIds.includes(option.id) ? <Badge>採用</Badge> : null}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setOptions((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
-                      setSelectedOptionIds((prev) =>
-                        prev.filter((selectedId) => selectedId !== option.id),
-                      );
-                    }}
-                  >
-                    削除
-                  </Button>
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={addOption}
-              >
+            <div className="mt-3 space-y-3">
+              {options.map((option) => {
+                const selected = selectedOptionIds.includes(option.id);
+                const isEditing = editingOptionId === option.id;
+                return (
+                  <div key={option.id} className="rounded-[10px] bg-neutral-50 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {optionMode === "SINGLE" ? (
+                        <Radio
+                          name="decision-option"
+                          value={option.id}
+                          checked={selected}
+                          onChange={() => toggleOption(option.id)}
+                        />
+                      ) : (
+                        <Checkbox
+                          checked={selected}
+                          onChange={() => toggleOption(option.id)}
+                        />
+                      )}
+                      {isEditing ? (
+                        <Input
+                          value={option.label}
+                          onChange={(event) => updateOption(option.id, { label: event.target.value })}
+                          className="flex-1"
+                        />
+                      ) : (
+                        <div className="flex flex-1 items-center gap-2">
+                          <p className="text-sm font-medium">{option.label || "（無題）"}</p>
+                        </div>
+                      )}
+                    </div>
+                    {isEditing ? (
+                      <>
+                        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+                          <Textarea
+                            className="min-h-[96px]"
+                            value={option.merit}
+                            onChange={(event) => updateOption(option.id, { merit: event.target.value })}
+                            placeholder="メリット"
+                          />
+                          <Textarea
+                            className="min-h-[96px]"
+                            value={option.demerit}
+                            onChange={(event) => updateOption(option.id, { demerit: event.target.value })}
+                            placeholder="デメリット"
+                          />
+                          <Textarea
+                            className="min-h-[96px]"
+                            value={option.note}
+                            onChange={(event) => updateOption(option.id, { note: event.target.value })}
+                            placeholder="備考"
+                          />
+                        </div>
+                        <Button variant="ghost" size="sm" className="mt-2" onClick={() => setEditingOptionId(null)}>完了</Button>
+                      </>
+                    ) : (
+                      <div className="mt-2 flex items-start justify-between gap-2">
+                        <div className="min-w-0 space-y-1 text-xs text-neutral-600">
+                          {[option.merit, option.demerit, option.note].some(Boolean) ? (
+                            <>
+                              {option.merit ? <p>メリット: {option.merit}</p> : null}
+                              {option.demerit ? <p>デメリット: {option.demerit}</p> : null}
+                              {option.note ? <p>備考: {option.note}</p> : null}
+                            </>
+                          ) : (
+                            <p>メリット・デメリット・備考を入力</p>
+                          )}
+                        </div>
+                        <Button variant="ghost" size="sm" className="h-6 shrink-0" onClick={() => setEditingOptionId(option.id)}>
+                          <PencilLine className="size-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <Button variant="outline" size="sm" onClick={addOption}>
                 選択肢を追加
               </Button>
             </div>
           </Card>
 
           <Card>
-            <CardTitle>決定結果（採用オプション）</CardTitle>
+            <CardTitle>決裁結論</CardTitle>
             <p className="mt-2 text-xs text-neutral-600">
               {selectedOptionLabels.length
-                ? optionMode === "HYBRID"
-                  ? `複合案: ${selectedOptionLabels.join(" + ")}`
-                  : `採用案: ${selectedOptionLabels[0]}`
-                : "採用案が未設定です。上の Options から選択してください。"}
+                ? `選択中: ${selectedOptionLabels.join(optionMode === "HYBRID" ? " + " : "")}`
+                : "選択肢が未選択です"}
             </p>
-            <Textarea
-              className="mt-3"
-              value={decisionConclusion}
-              onChange={(event) => setDecisionConclusion(event.target.value)}
-            />
+            {isEditingConclusion ? (
+              <div className="mt-3">
+                <Textarea
+                  value={decisionConclusion}
+                  onChange={(event) => setDecisionConclusion(event.target.value)}
+                />
+                <Button variant="ghost" size="sm" className="mt-2" onClick={() => setIsEditingConclusion(false)}>完了</Button>
+              </div>
+            ) : (
+              <div className="mt-3 flex items-start gap-2">
+                <p className="flex-1 text-sm text-neutral-700 whitespace-pre-wrap">{decisionConclusion || "（未入力）"}</p>
+                <Button variant="ghost" size="sm" onClick={() => setIsEditingConclusion(true)}>
+                  <PencilLine className="size-4" />
+                </Button>
+              </div>
+            )}
           </Card>
 
           <Card>
-            <CardTitle>根拠（賛成/反対/条件）</CardTitle>
-            <Textarea className="mt-3" value={prosCons} onChange={(event) => setProsCons(event.target.value)} />
-          </Card>
-
-          <Card>
-            <CardTitle>前提（Assumptions）</CardTitle>
-            <Textarea className="mt-3" value={assumptions} onChange={(event) => setAssumptions(event.target.value)} />
-          </Card>
-
-          <Card>
-            <CardTitle>反証条件（Reopen Trigger）</CardTitle>
-            <Textarea className="mt-3" value={reopenTrigger} onChange={(event) => setReopenTrigger(event.target.value)} />
+            <div className="flex items-center justify-between">
+              <CardTitle>前提条件 / 再検討トリガー</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setShowDeepContext((prev) => !prev)}>
+                {showDeepContext ? "非表示" : "表示"}
+              </Button>
+            </div>
+            {showDeepContext ? (
+              <div className="mt-3 space-y-4">
+                <div>
+                  <p className="mb-1 text-xs font-medium text-neutral-600">前提条件</p>
+                  {isEditingAssumptions ? (
+                    <div>
+                      <Textarea value={assumptions} onChange={(event) => setAssumptions(event.target.value)} />
+                      <Button variant="ghost" size="sm" className="mt-2" onClick={() => setIsEditingAssumptions(false)}>完了</Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <p className="flex-1 text-sm text-neutral-700 whitespace-pre-wrap">{assumptions || "（未入力）"}</p>
+                      <Button variant="ghost" size="sm" onClick={() => setIsEditingAssumptions(true)}>
+                        <PencilLine className="size-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium text-neutral-600">再検討トリガー</p>
+                  {isEditingReopenTrigger ? (
+                    <div>
+                      <Textarea value={reopenTrigger} onChange={(event) => setReopenTrigger(event.target.value)} />
+                      <Button variant="ghost" size="sm" className="mt-2" onClick={() => setIsEditingReopenTrigger(false)}>完了</Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <p className="flex-1 text-sm text-neutral-700 whitespace-pre-wrap">{reopenTrigger || "（未入力）"}</p>
+                      <Button variant="ghost" size="sm" onClick={() => setIsEditingReopenTrigger(true)}>
+                        <PencilLine className="size-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </Card>
         </div>
 
-        <Card className="col-span-4 space-y-3">
-          <CardTitle>アクション</CardTitle>
-
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant={activeTab === "Prep" ? "secondary" : "ghost"}
-              onClick={() => setActiveTab("Prep")}
-            >
-              Prep（決裁前）
-            </Button>
-            <Button
-              size="sm"
-              variant={activeTab === "Exec" ? "secondary" : "ghost"}
-              onClick={() => setActiveTab("Exec")}
-            >
-              Exec（決裁後）
-            </Button>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between rounded-[10px] border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs">
-              <p>紐づくアクション数: {actions.length}</p>
-              <div className="flex gap-1">
-                <Button variant="outline" size="sm" onClick={() => addAction("Prep")}>
-                  Prep追加
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => addAction("Exec")}>
-                  Exec追加
-                </Button>
-              </div>
-            </div>
-            {actionList.map((action) => (
-              <div key={action.actionId} className="rounded-[10px] border border-neutral-200 p-2">
-                <p className="text-sm font-medium">{action.title}</p>
-                <p className="text-xs text-neutral-500">
-                  担当: {action.assignee || "未設定"} / 期限: {action.dueAt?.slice(0, 10) || "未設定"}
-                </p>
+        <div className="space-y-4 xl:col-span-4">
+          <Card className="space-y-3">
+            <CardTitle>決裁メタ情報</CardTitle>
+            {isEditingMeta ? (
+              <div className="space-y-3">
                 <Select
-                  value={action.status}
-                  onChange={(event) =>
-                    updateActionStatus(action.actionId, event.target.value as ActionStatus)
-                  }
-                  controlSize="sm"
-                  className="mt-2"
+                  value={status}
+                  onChange={(event) => {
+                    setStatusDraft(event.target.value as DecisionStatus);
+                    setNotice("ステータスを変更しました");
+                  }}
+                  controlSize="md"
                 >
-                  {actionStatuses.map((statusOption) => (
-                    <option key={statusOption} value={statusOption}>
-                      {statusOption}
+                  {decisionStatusOrder.map((item) => (
+                    <option key={item} value={item}>
+                      {decisionStatusLabels[item]}
                     </option>
                   ))}
                 </Select>
+                <Input value={owner} onChange={(event) => setOwnerDraft(event.target.value)} placeholder="決裁者" />
+                <Input type="datetime-local" value={dueAt} onChange={(event) => setDueAtDraft(event.target.value)} />
+                <Button variant="ghost" size="sm" onClick={() => setIsEditingMeta(false)}>完了</Button>
               </div>
-            ))}
-          </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="space-y-1 text-sm text-neutral-700">
+                  <div className="flex items-center gap-2">
+                    <span>ステータス:</span>
+                    <StatusChip status={status} />
+                  </div>
+                  <p>決裁者: {owner || "（未設定）"}</p>
+                  <p>期限: {dueAt ? dueAt.replace("T", " ").slice(0, 16) : "（未設定）"}</p>
+                </div>
+                <Button variant="ghost" size="sm" className="w-fit" onClick={() => setIsEditingMeta(true)}>
+                  <PencilLine className="mr-1 size-3" />
+                  編集
+                </Button>
+              </div>
+            )}
+          </Card>
 
-          <div className="rounded-[10px] border border-neutral-200 p-3 text-xs">
-            <p className="font-medium">不足質問（OPEN）</p>
-            <div className="mt-2 space-y-1">
-              {openQuestions.slice(0, 3).map((question) => (
-                <p key={question.questionId} className="text-neutral-600">
-                  {question.title} / {question.missingFields.map(getMissingFieldLabel).join("/")}
-                </p>
-              ))}
+          <Card className="space-y-3">
+            <CardTitle>アクション</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant={activeTab === "Prep" ? "secondary" : "ghost"}
+                  onClick={() => setActiveTab("Prep")}
+                >
+                  準備
+                </Button>
+                <Button
+                  size="sm"
+                  variant={activeTab === "Exec" ? "secondary" : "ghost"}
+                  onClick={() => setActiveTab("Exec")}
+                >
+                  実行
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-neutral-600">{visibleActionCount} 件</p>
+                <Button variant="outline" size="sm" onClick={() => addAction(activeTab)}>
+                  {activeTab === "Prep" ? "準備を追加" : "実行を追加"}
+                </Button>
+              </div>
             </div>
-          </div>
+            <p className="rounded-[10px] border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+              決裁を前に進めるためのアクション管理です。個別タスクの管理は既存のタスク管理ツールで行う前提です。
+            </p>
 
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                setNotice("アクション素案を生成しました");
-              }}
-            >
-              素案生成（Skill）
-            </Button>
-            <OpenRightPanelButton label="質問を見る" tab="chat" className="w-full" />
-          </div>
-        </Card>
+            <div className="space-y-2">
+              {actionList.map((action) => {
+                const displayTitle = actionTitleOverrides[action.actionId] ?? action.title;
+                const actionNote = getActionNote(action);
+                const actionAssignee = getActionAssignee(action);
+                const actionDueAt = getActionDueAt(action);
+                const isEditingAction = editingActionId === action.actionId;
+                return (
+                  <div key={action.actionId} className="rounded-[10px] bg-neutral-50 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium">{displayTitle || "（無題）"}</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={() => setEditingActionId(isEditingAction ? null : action.actionId)}
+                      >
+                        <PencilLine className="mr-1 size-3" />
+                        {isEditingAction ? "完了" : "編集"}
+                      </Button>
+                    </div>
+
+                    {isEditingAction ? (
+                      <div className="mt-2 space-y-2">
+                        <Input
+                          value={displayTitle}
+                          onChange={(e) =>
+                            setActionTitleOverrides((prev) => ({
+                              ...prev,
+                              [action.actionId]: e.target.value,
+                            }))
+                          }
+                          className="h-8 text-sm"
+                        />
+                        <Input
+                          value={actionAssignee}
+                          onChange={(event) => updateActionAssignee(action.actionId, event.target.value)}
+                          placeholder="担当者"
+                          className="h-8 text-sm"
+                        />
+                        <Input
+                          type="datetime-local"
+                          value={actionDueAt}
+                          onChange={(event) => updateActionDueAt(action.actionId, event.target.value)}
+                          className="h-8 text-sm"
+                        />
+                        <Select
+                          value={action.status}
+                          onChange={(event) =>
+                            updateActionStatus(
+                              action.actionId,
+                              event.target.value as (typeof actionStatusOrder)[number],
+                            )
+                          }
+                          controlSize="sm"
+                        >
+                          {actionStatusOrder.map((statusOption) => (
+                            <option key={statusOption} value={statusOption}>
+                              {actionStatusLabels[statusOption]}
+                            </option>
+                          ))}
+                        </Select>
+                        {action.type === "Exec" ? (
+                          <>
+                            <Select
+                              value={getActionOutcome(action)}
+                              onChange={(event) =>
+                                updateActionOutcome(action.actionId, event.target.value as ActionOutcome)
+                              }
+                              controlSize="sm"
+                            >
+                              <option value="CLOSE_DECISION">この決裁をクローズする</option>
+                              <option value="NEXT_DECISION">次の決裁につなげる</option>
+                            </Select>
+                            {getActionOutcome(action) === "NEXT_DECISION" ? (
+                              nextDecisionCandidates.length > 0 ? (
+                                <Select
+                                  value={getNextDecisionId(action)}
+                                  onChange={(event) =>
+                                    updateActionNextDecision(action.actionId, event.target.value)
+                                  }
+                                  controlSize="sm"
+                                >
+                                  <option value="">次の決裁を選択</option>
+                                  {nextDecisionCandidates.map((candidate) => (
+                                    <option key={candidate.decisionId} value={candidate.decisionId}>
+                                      {candidate.title}
+                                    </option>
+                                  ))}
+                                </Select>
+                              ) : (
+                                <p className="text-xs text-amber-700">連携先の決裁がありません</p>
+                              )
+                            ) : null}
+                          </>
+                        ) : (
+                          <Badge className="w-fit border-blue-200 bg-blue-50 text-blue-700">
+                            本決裁のための準備（固定）
+                          </Badge>
+                        )}
+                        <Textarea
+                          className="min-h-[72px]"
+                          placeholder="備考（進捗・連絡事項）"
+                          value={actionNote}
+                          onChange={(event) => updateActionNote(action.actionId, event.target.value)}
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        <Badge className="w-fit border-neutral-300 bg-white text-neutral-700">
+                          {actionStatusLabels[action.status]}
+                        </Badge>
+                        {action.type === "Prep" ? (
+                          <Badge className="w-fit border-blue-200 bg-blue-50 text-blue-700">
+                            本決裁のための準備（固定）
+                          </Badge>
+                        ) : (
+                          <p className="text-xs text-neutral-600">
+                            完了時:{" "}
+                            {getActionOutcome(action) === "CLOSE_DECISION"
+                              ? "この決裁をクローズする"
+                              : `次の決裁につなげる${
+                                  getNextDecisionId(action)
+                                    ? `（${
+                                        nextDecisionCandidates.find((c) => c.decisionId === getNextDecisionId(action))
+                                          ?.title ?? "選択済み"
+                                      }）`
+                                    : "（未選択）"
+                                }`}
+                          </p>
+                        )}
+                        <p className="text-xs text-neutral-600">
+                          備考: {actionNote || "（未入力）"}
+                        </p>
+                        <p className="text-xs text-neutral-600">
+                          担当: {actionAssignee || "（未設定）"}
+                        </p>
+                        <p className="text-xs text-neutral-600">
+                          期限: {formatDueAtLabel(actionDueAt)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {activeTab === "Prep"
+                ? openQuestions.map((question) => (
+                    <div key={question.questionId} className="rounded-[10px] border border-amber-200 bg-amber-50 p-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{question.title}</p>
+                          <Badge className="mt-1 border-amber-300 bg-amber-100 text-amber-800">
+                            未対応
+                          </Badge>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() => openChatForQuestion(question.questionId)}
+                        >
+                          <MessageSquare className="mr-1 size-3" />
+                          チャット
+                        </Button>
+                      </div>
+                      <p className="text-xs text-neutral-600">
+                        不足: {question.missingFields.map(getMissingFieldLabel).join(" / ")}
+                      </p>
+                    </div>
+                  ))
+                : null}
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );

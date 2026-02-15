@@ -1,6 +1,11 @@
 export const ROUTES = {
+  login: "/login",
+  signup: "/signup",
   projects: "/projects",
-  projectHome: (projectId: string) => `/p/${projectId}`,
+  /** プロジェクトを開いたときのデフォルト（決裁一覧） */
+  projectHome: (projectId: string) => `/p/${projectId}/decisions`,
+  /** 管理権限向けダッシュボード */
+  projectDashboard: (projectId: string) => `/p/${projectId}/dashboard`,
   meetings: (projectId: string) => `/p/${projectId}/meetings`,
   meetingNew: (projectId: string) => `/p/${projectId}/meetings/new`,
   meetingDetail: (projectId: string, meetingId: string) =>
@@ -8,6 +13,7 @@ export const ROUTES = {
   meetingAgenda: (projectId: string, meetingId: string) =>
     `/p/${projectId}/meetings/${meetingId}#agenda`,
   decisions: (projectId: string) => `/p/${projectId}/decisions`,
+  decisionNew: (projectId: string) => `/p/${projectId}/decisions/new`,
   decisionDetail: (projectId: string, decisionId: string) =>
     `/p/${projectId}/decisions/${decisionId}`,
   chat: (projectId: string, decisionId?: string) =>

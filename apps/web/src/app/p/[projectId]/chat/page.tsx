@@ -9,5 +9,5 @@ export default async function ChatPage({
 }) {
   const { projectId } = await params;
   const { decisionId } = await searchParams;
-  return <ChatMock projectId={projectId} decisionId={decisionId ?? "dcs_01"} />;
+  return <ChatMock key={decisionId ?? "default"} projectId={projectId} decisionId={decisionId} />;
 }

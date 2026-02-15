@@ -1,0 +1,209 @@
+[
+  {
+    "path": "projects/prj_01",
+    "data": {
+      "projectId": "prj_01",
+      "name": "営業DX刷新",
+      "description": "デモ用プロジェクト",
+      "status": "ACTIVE",
+      "counters": {
+        "decisions_total": 2,
+        "decisions_open": 2,
+        "decisions_needs_info": 1,
+        "decisions_ready": 1,
+        "decisions_reopen": 0,
+        "decisions_owner_missing": 0,
+        "actions_overdue": 0,
+        "meetings_total": 1,
+        "meetings_analyzing": 0
+      },
+      "createdAt": "__NOW__",
+      "updatedAt": "__NOW__",
+      "lastActivityAt": "__NOW__",
+      "lastMeetingAt": "__NOW__",
+      "lastDecisionUpdatedAt": "__NOW__"
+    }
+  },
+  {
+    "path": "projects/prj_01/meetings/mtg_01",
+    "data": {
+      "meetingId": "mtg_01",
+      "projectId": "prj_01",
+      "title": "Q2 施策検討会",
+      "heldAt": "__NOW__",
+      "participants": ["SH", "営業本部長"],
+      "source": { "type": "PASTE" },
+      "raw": {
+        "storage": "FIRESTORE",
+        "text": "施策効果を比較検討するための会議メモ"
+      },
+      "status": "DONE",
+      "extracted": { "decisionIds": ["dcs_01", "dcs_02"] },
+      "createdAt": "__NOW__",
+      "updatedAt": "__NOW__"
+    }
+  },
+  {
+    "path": "projects/prj_01/decisions/dcs_01",
+    "data": {
+      "decisionId": "dcs_01",
+      "projectId": "prj_01",
+      "title": "営業施策A/Bの比較結果",
+      "status": "NEEDS_INFO",
+      "priority": "HIGH",
+      "owner": { "userId": "u_01", "displayName": "高橋" },
+      "dueAt": "__NEXT_WEEK__",
+      "options": [
+        { "id": "opt_1", "label": "Aランク重視" },
+        { "id": "opt_2", "label": "既存施策継続" }
+      ],
+      "criteria": ["売上伸び率", "失注リスク"],
+      "assumptions": ["週次で営業係数を更新する"],
+      "reopenTriggers": [],
+      "rationale": {
+        "pros": ["売上拡大"],
+        "cons": ["運用負荷"],
+        "conditions": ["検証結果が有効"]
+      },
+      "completeness": { "score": 72, "missingFields": ["rationale"] },
+      "linkage": { "linkedMeetingIds": ["mtg_01"] },
+      "merge": {
+        "mergeStatus": "NONE",
+        "requiresHumanApproval": true,
+        "mergeCandidates": []
+      },
+      "ownerMissing": false,
+      "dueMissing": false,
+      "criteriaMissing": false,
+      "optionsCount": 2,
+      "linkedMeetingCount": 1,
+      "createdAt": "__NOW__",
+      "updatedAt": "__NOW__"
+    }
+  },
+  {
+    "path": "projects/prj_01/decisions/dcs_02",
+    "data": {
+      "decisionId": "dcs_02",
+      "projectId": "prj_01",
+      "title": "新規キャンペーンのGo/NoGo",
+      "status": "READY_TO_DECIDE",
+      "priority": "MEDIUM",
+      "owner": { "userId": "u_02", "displayName": "鈴木" },
+      "dueAt": "__NEXT_WEEK__",
+      "options": [
+        { "id": "opt_1", "label": "Go" },
+        { "id": "opt_2", "label": "NoGo" }
+      ],
+      "criteria": ["CPA", "継続率"],
+      "assumptions": ["予算は確保済み"],
+      "reopenTriggers": ["CPAが閾値を超過"],
+      "rationale": {
+        "pros": ["リーチ拡大"],
+        "cons": ["コスト増"],
+        "conditions": ["翌月レビュー"]
+      },
+      "completeness": { "score": 90, "missingFields": [] },
+      "linkage": { "linkedMeetingIds": ["mtg_01"] },
+      "merge": {
+        "mergeStatus": "NONE",
+        "requiresHumanApproval": true,
+        "mergeCandidates": []
+      },
+      "ownerMissing": false,
+      "dueMissing": false,
+      "criteriaMissing": false,
+      "optionsCount": 2,
+      "linkedMeetingCount": 1,
+      "createdAt": "__NOW__",
+      "updatedAt": "__NOW__"
+    }
+  },
+  {
+    "path": "projects/prj_01/decisions/dcs_01/actions/act_01",
+    "data": {
+      "actionId": "act_01",
+      "projectId": "prj_01",
+      "decisionId": "dcs_01",
+      "type": "PREP",
+      "title": "施策リスクの再整理",
+      "assignee": { "userId": "u_03", "displayName": "田中" },
+      "dueAt": "__NEXT_WEEK__",
+      "status": "TODO",
+      "createdAt": "__NOW__",
+      "updatedAt": "__NOW__"
+    }
+  },
+  {
+    "path": "projects/prj_01/decisions/dcs_01/threads/thr_01",
+    "data": {
+      "threadId": "thr_01",
+      "projectId": "prj_01",
+      "decisionId": "dcs_01",
+      "scopeType": "DECISION",
+      "scopeId": "dcs_01",
+      "channel": "IN_APP",
+      "title": "不足質問",
+      "createdAt": "__NOW__",
+      "updatedAt": "__NOW__",
+      "lastMessageAt": "__NOW__"
+    }
+  },
+  {
+    "path": "projects/prj_01/decisions/dcs_01/threads/thr_01/messages/msg_01",
+    "data": {
+      "messageId": "msg_01",
+      "threadId": "thr_01",
+      "senderType": "AGENT",
+      "format": "QUESTION_SET",
+      "content": "不足している根拠を教えてください。",
+      "metadata": {
+        "questions": [
+          {
+            "qid": "q_01",
+            "type": "text",
+            "text": "比較結果の反対理由は何ですか？",
+            "required": true,
+            "maps_to": { "targetType": "DECISION", "field": "rationale" }
+          }
+        ]
+      },
+      "relatesTo": { "projectId": "prj_01", "decisionId": "dcs_01" },
+      "createdAt": "__NOW__"
+    }
+  },
+  {
+    "path": "projects/prj_01/decisions/dcs_01/threads/thr_01/messages/msg_02",
+    "data": {
+      "messageId": "msg_02",
+      "threadId": "thr_01",
+      "senderType": "USER",
+      "format": "ANSWER_SET",
+      "content": "運用負荷の増加が懸念ですが、試験運用で確認可能です。",
+      "metadata": {
+        "answers": [
+          {
+            "qid": "q_01",
+            "value": "運用負荷の増加が懸念ですが、試験運用で確認可能です。"
+          }
+        ]
+      },
+      "relatesTo": { "projectId": "prj_01", "decisionId": "dcs_01" },
+      "createdAt": "__NOW__"
+    }
+  },
+  {
+    "path": "projects/prj_01/notifications/ntf_01",
+    "data": {
+      "notificationId": "ntf_01",
+      "projectId": "prj_01",
+      "eventType": "DECISION_NEEDS_INFO",
+      "title": "不足情報の確認",
+      "body": "営業施策A/Bの比較結果で追加確認が必要です。",
+      "link": { "route": "/p/prj_01/decisions/dcs_01" },
+      "delivery": { "channel": "IN_APP", "status": "DELIVERED" },
+      "createdBy": "SYSTEM",
+      "createdAt": "__NOW__"
+    }
+  }
+]

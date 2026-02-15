@@ -41,6 +41,11 @@ export const getMeeting = async (projectId: string, meetingId: string) => {
   return Meeting.parse(snap.data());
 };
 
+export const listMeetingsByProject = async (projectId: string, limit = 200) => {
+  const snap = await refs.meetings(projectId).orderBy("updatedAt", "desc").limit(limit).get();
+  return snap.docs.map((d) => Meeting.parse(d.data()));
+};
+
 export const patchMeeting = async (projectId: string, meetingId: string, patch: Record<string, unknown>) => {
   await refs.meeting(projectId, meetingId).set({ ...patch, updatedAt: nowIso() }, { merge: true });
   await recomputeProjectCounters(projectId);

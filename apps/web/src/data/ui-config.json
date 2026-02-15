@@ -1,0 +1,75 @@
+{
+  "missingFieldLabels": {
+    "owner": "決裁者",
+    "dueAt": "期限",
+    "criteria": "判断基準",
+    "options": "選択肢",
+    "assignee": "担当者",
+    "definitionOfDone": "完了条件",
+    "blockedReason": "ブロッカー理由"
+  },
+  "decisionStatusLabels": {
+    "NEEDS_INFO": "情報不足",
+    "READY_TO_DECIDE": "決裁可能",
+    "DECIDED": "決裁済み",
+    "REOPEN": "再審議"
+  },
+  "meetingStatusLabels": {
+    "ANALYZING": "解析中",
+    "DONE": "完了",
+    "FAILED": "解析失敗"
+  },
+  "actionStatusLabels": {
+    "TODO": "未着手",
+    "DOING": "進行中",
+    "DONE": "完了",
+    "BLOCKED": "停止中"
+  },
+  "decisionStatusOrder": ["NEEDS_INFO", "READY_TO_DECIDE", "DECIDED", "REOPEN"],
+  "actionStatusOrder": ["TODO", "DOING", "DONE", "BLOCKED"],
+  "projectCreationDefaults": {
+    "description": "新規プロジェクト",
+    "nextMeetingAt": "2026-02-14T10:00:00+09:00"
+  },
+  "meetingFormDefaults": {
+    "participants": "本部長 佐藤, PM 高橋"
+  },
+  "membersDefaults": [
+    { "name": "本部長 佐藤", "role": "決裁者", "status": "有効" },
+    { "name": "PM 高橋", "role": "編集者", "status": "有効" }
+  ],
+  "decisionDetailDefaults": {
+    "options": [
+      {
+        "id": "opt_01",
+        "label": "全社共通の標準テンプレートへ統一",
+        "merit": "入力揺れを減らし、承認リードタイムを短縮できる。",
+        "demerit": "例外案件の運用コストが増える。",
+        "note": "導入初月は営業部を対象に先行適用する。"
+      },
+      {
+        "id": "opt_02",
+        "label": "部門ごとに2テンプレートを維持",
+        "merit": "現場実態に合わせた柔軟運用ができる。",
+        "demerit": "比較評価時の軸が部門ごとにずれやすい。",
+        "note": "統合判断は次四半期レビューで再評価する。"
+      },
+      {
+        "id": "opt_03",
+        "label": "現行のまま運用を継続",
+        "merit": "追加の運用変更が不要で短期負荷が低い。",
+        "demerit": "入力品質改善が進まず承認工数が高止まりする。",
+        "note": "暫定措置として2週間以内に再提案を前提とする。"
+      }
+    ],
+    "selectedOptionIds": ["opt_01"],
+    "conclusion": "採用理由と、複合案の場合の適用条件を記載します。",
+    "prosCons": "賛成: 入力揺れ削減 / 反対: 例外対応コスト増 / 条件: 2週間の試験運用",
+    "assumptions": "営業部のテンプレート運用ルールが週次で共有されること。",
+    "reopenTrigger": "商談登録率が導入前比で5%以上低下した場合。",
+    "newOptionLabel": "新しい選択肢"
+  },
+  "execDefaults": {
+    "overdueReferenceAt": "2026-02-08T12:00:00+09:00"
+  }
+}

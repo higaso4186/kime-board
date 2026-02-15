@@ -1,0 +1,119 @@
+[
+  {
+    "messageId": "msg_01",
+    "threadId": "thr_prj01_dcs01",
+    "projectId": "prj_01",
+    "decisionId": "dcs_01",
+    "questionId": "qst_01",
+    "sender": "agent",
+    "kind": "QUESTION",
+    "text": "この決裁の最終決裁者は誰ですか？",
+    "createdAt": "2026-02-08T09:21:05+09:00"
+  },
+  {
+    "messageId": "msg_02",
+    "threadId": "thr_prj01_dcs01",
+    "projectId": "prj_01",
+    "decisionId": "dcs_01",
+    "questionId": "qst_02",
+    "sender": "agent",
+    "kind": "QUESTION",
+    "text": "決める期限はいつにしますか？",
+    "createdAt": "2026-02-08T09:22:10+09:00"
+  },
+  {
+    "messageId": "msg_03",
+    "threadId": "thr_prj01_dcs01",
+    "projectId": "prj_01",
+    "decisionId": "dcs_01",
+    "questionId": "qst_01",
+    "sender": "user",
+    "kind": "ANSWER",
+    "text": "本部長 佐藤を決裁者にします。",
+    "createdAt": "2026-02-08T09:25:00+09:00"
+  },
+  {
+    "messageId": "msg_04",
+    "threadId": "thr_prj01_dcs01",
+    "projectId": "prj_01",
+    "decisionId": "dcs_01",
+    "actionId": "act_02",
+    "questionId": "qst_03",
+    "sender": "agent",
+    "kind": "QUESTION",
+    "text": "act_02 の完了条件（Definition of Done）を明記してください。",
+    "createdAt": "2026-02-08T09:40:05+09:00"
+  },
+  {
+    "messageId": "msg_05",
+    "threadId": "thr_prj01_dcs01",
+    "projectId": "prj_01",
+    "decisionId": "dcs_01",
+    "actionId": "act_05",
+    "questionId": "qst_06",
+    "sender": "agent",
+    "kind": "QUESTION",
+    "text": "act_05 の完了条件と、現時点の進捗率を教えてください。",
+    "createdAt": "2026-02-08T09:50:10+09:00"
+  },
+  {
+    "messageId": "msg_06",
+    "threadId": "thr_prj01_dcs01",
+    "projectId": "prj_01",
+    "decisionId": "dcs_01",
+    "actionId": "act_05",
+    "questionId": "qst_06",
+    "sender": "user",
+    "kind": "ANSWER",
+    "text": "主要3パターンは整理済みで、残り2パターンを収集中です。完了条件は全例外パターンのレビュー完了です。",
+    "createdAt": "2026-02-08T10:01:00+09:00"
+  },
+  {
+    "messageId": "msg_07",
+    "threadId": "thr_prj01_dcs01",
+    "projectId": "prj_01",
+    "decisionId": "dcs_01",
+    "actionId": "act_05",
+    "questionId": "qst_06",
+    "sender": "agent",
+    "kind": "NOTE",
+    "text": "確認しました。進捗は把握できましたが、完了の判定日が未記載のためチケットは OPEN のままです。",
+    "createdAt": "2026-02-08T10:03:00+09:00"
+  },
+  {
+    "messageId": "msg_08",
+    "threadId": "thr_prj01_dcs03",
+    "projectId": "prj_01",
+    "decisionId": "dcs_03",
+    "actionId": "act_03",
+    "questionId": "qst_04",
+    "sender": "agent",
+    "kind": "QUESTION",
+    "text": "act_03 が BLOCKED になっている理由を、依存先まで含めて具体化してください。",
+    "createdAt": "2026-02-08T09:45:10+09:00"
+  },
+  {
+    "messageId": "msg_09",
+    "threadId": "thr_prj01_dcs03",
+    "projectId": "prj_01",
+    "decisionId": "dcs_03",
+    "actionId": "act_03",
+    "questionId": "qst_04",
+    "sender": "user",
+    "kind": "ANSWER",
+    "text": "監視アラート閾値の合意待ちで本番反映を停止しています。SRE とデータ分析チームで 2/9 17:00 に最終確認します。",
+    "createdAt": "2026-02-08T10:12:00+09:00"
+  },
+  {
+    "messageId": "msg_10",
+    "threadId": "thr_prj01_dcs03",
+    "projectId": "prj_01",
+    "decisionId": "dcs_03",
+    "actionId": "act_03",
+    "questionId": "qst_04",
+    "sender": "agent",
+    "kind": "NOTE",
+    "text": "理由と解消予定を確認しました。このチケットは対応完了としてクローズします。",
+    "createdAt": "2026-02-08T10:15:00+09:00"
+  }
+]

@@ -18,6 +18,7 @@ export const Action = z.object({
   assignee: ActionAssignee.optional(),
   dueAt: z.string().datetime().optional(),
   status: ActionStatus.default("TODO"),
+  note: z.string().optional(),
   blockedReason: z.string().optional(),
   createdBy: z.string().optional(),
   updatedBy: z.string().optional(),

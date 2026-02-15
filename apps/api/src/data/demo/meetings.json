@@ -1,0 +1,29 @@
+[
+  {
+    "meetingId": "mtg_01",
+    "projectId": "prj_01",
+    "title": "週次PJ定例 2/8",
+    "heldAt": "2026-02-08T09:00:00+09:00",
+    "participants": ["本部長 佐藤", "PM 高橋", "営業Mgr 田中"],
+    "status": "DONE",
+    "extractedDecisionIds": ["dcs_01", "dcs_02"]
+  },
+  {
+    "meetingId": "mtg_02",
+    "projectId": "prj_01",
+    "title": "ステアリング委員会",
+    "heldAt": "2026-02-05T16:00:00+09:00",
+    "participants": ["CRO", "本部長 佐藤", "PM 高橋"],
+    "status": "DONE",
+    "extractedDecisionIds": ["dcs_03"]
+  },
+  {
+    "meetingId": "mtg_03",
+    "projectId": "prj_01",
+    "title": "臨時課題整理",
+    "heldAt": "2026-02-03T13:00:00+09:00",
+    "participants": ["PM 高橋", "人事 伊藤"],
+    "status": "DONE",
+    "extractedDecisionIds": ["dcs_04"]
+  }
+]

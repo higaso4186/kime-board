@@ -1,0 +1,93 @@
+[
+  {
+    "actionId": "act_01",
+    "decisionId": "dcs_02",
+    "projectId": "prj_01",
+    "title": "営業 KPI 新定義を資料化",
+    "type": "Prep",
+    "supportsDecisionId": "dcs_01",
+    "assignee": "PM 高橋",
+    "dueAt": "2026-02-11T17:00:00+09:00",
+    "status": "DOING",
+    "note": "初稿作成中。レビュー待ち。"
+  },
+  {
+    "actionId": "act_02",
+    "decisionId": "dcs_01",
+    "projectId": "prj_01",
+    "title": "決裁者候補の確認",
+    "type": "Prep",
+    "assignee": "営業Mgr 田中",
+    "dueAt": "2026-02-10T12:00:00+09:00",
+    "status": "TODO",
+    "note": "候補者リストを営業本部へ確認依頼。"
+  },
+  {
+    "actionId": "act_05",
+    "decisionId": "dcs_01",
+    "projectId": "prj_01",
+    "title": "見積例外パターンを棚卸し",
+    "type": "Prep",
+    "assignee": "営業Mgr 田中",
+    "dueAt": "2026-02-12T18:00:00+09:00",
+    "status": "DOING",
+    "note": "主要3パターンは整理済み。追加収集中。"
+  },
+  {
+    "actionId": "act_06",
+    "decisionId": "dcs_01",
+    "projectId": "prj_01",
+    "title": "テンプレート移行の社内告知",
+    "type": "Exec",
+    "assignee": "BizOps 山口",
+    "dueAt": "2026-02-16T10:00:00+09:00",
+    "status": "TODO",
+    "note": "告知文案を法務確認中。"
+  },
+  {
+    "actionId": "act_03",
+    "decisionId": "dcs_03",
+    "projectId": "prj_01",
+    "title": "v2 ロジックの本番適用",
+    "type": "Exec",
+    "assignee": "SRE 鈴木",
+    "dueAt": "2026-02-06T19:00:00+09:00",
+    "status": "BLOCKED",
+    "note": "監視アラート閾値の調整待ち。"
+  },
+  {
+    "actionId": "act_07",
+    "decisionId": "dcs_02",
+    "projectId": "prj_01",
+    "title": "KPI定義変更に伴うダッシュボード改修",
+    "type": "Exec",
+    "assignee": "Data 石井",
+    "dueAt": "2026-02-18T12:00:00+09:00",
+    "status": "TODO",
+    "note": "改修範囲はダッシュボード2画面。"
+  },
+  {
+    "actionId": "act_08",
+    "decisionId": "dcs_02",
+    "projectId": "prj_01",
+    "title": "KPI改訂が研修設計へ与える影響を整理",
+    "type": "Prep",
+    "supportsDecisionId": "dcs_04",
+    "assignee": "人事 伊藤",
+    "dueAt": "2026-02-12T15:00:00+09:00",
+    "status": "TODO",
+    "note": "影響範囲をチームごとに整理中。"
+  },
+  {
+    "actionId": "act_04",
+    "decisionId": "dcs_04",
+    "projectId": "prj_01",
+    "title": "研修対象の再集計",
+    "type": "Exec",
+    "supportsDecisionId": "dcs_02",
+    "assignee": "人事 伊藤",
+    "dueAt": "2026-02-07T19:00:00+09:00",
+    "status": "TODO",
+    "note": "対象者リスト再抽出ジョブを準備。"
+  }
+]
